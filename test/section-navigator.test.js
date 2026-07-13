@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { SectionNavigator } from "../src/ui/sections.js";
+import { SectionController, SectionNavigator } from "../src/ui/sections.js";
 
 const theme = { fg: (_c, t) => t, bold: (t) => t };
 const plain = (lines) => lines.join("\n");
@@ -24,6 +24,32 @@ const navigator = (count, rows) => new SectionNavigator({
   onClose() {},
   requestRender() {},
   viewportRows: () => rows,
+});
+
+test("tool-heavy transcripts do not evict Thinking sections", () => {
+  const controller = new SectionController();
+  controller.register({
+    id: "thinking:retained",
+    kind: "thinking",
+    label: "Thinking · retained",
+    isExpanded: () => false,
+    renderDetail: () => ["Important reasoning"],
+    toggle() {},
+  });
+  for (let index = 0; index < 75; index += 1) {
+    controller.register({
+      id: `tools:${index}`,
+      kind: "tools",
+      label: `Tool group ${index}`,
+      isExpanded: () => false,
+      renderDetail: () => [`Tool detail ${index}`],
+      toggle() {},
+    });
+  }
+
+  const sections = controller.list();
+  assert.equal(sections.length, 76);
+  assert.ok(sections.some((section) => section.id === "thinking:retained"));
 });
 
 test("windows the list to the viewport and keeps the selection on screen", () => {

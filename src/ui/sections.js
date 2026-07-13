@@ -1,8 +1,6 @@
 import { matchesKey, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { errorTitle, renderErrorText, trimBlankLines } from "../format.js";
 
-const MAX_NAVIGABLE_SECTIONS = 50;
-
 export class SectionController {
   constructor() {
     this.sectionsById = new Map();
@@ -11,11 +9,11 @@ export class SectionController {
 
   register(section) {
     if (!this.sectionsById.has(section.id)) {
+      // Transcript rebuilds remove stale section kinds before registering the
+      // active branch again. Do not impose a second global FIFO cap here: a
+      // tool-heavy turn could otherwise evict every Thinking section even
+      // though the navigator itself is windowed and can browse long lists.
       this.sectionIds.push(section.id);
-      if (this.sectionIds.length > MAX_NAVIGABLE_SECTIONS) {
-        const removedId = this.sectionIds.shift();
-        this.sectionsById.delete(removedId);
-      }
     }
     this.sectionsById.set(section.id, section);
   }
