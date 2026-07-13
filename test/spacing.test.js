@@ -440,4 +440,43 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
       );
     }
   }
+
+  // Real session pattern: Thinking+toolCall, compact/hidden tool component,
+  // then the next Thinking continuation. Standalone transcript spacers around
+  // the zero-row tool must not combine with the latter component's own blank.
+  const mixedEndingThinkingMessage = {
+    role: "assistant",
+    content: [
+      { type: "thinking", thinking: "Thought before visible prose" },
+      { type: "text", text: "Visible prose inside the assistant continuation" },
+      { type: "thinking", thinking: "Final thought before the tool call" },
+      { type: "toolCall", id: "mixed-boundary-tool", name: "TaskCreate", arguments: {} },
+    ],
+    stopReason: "toolUse",
+  };
+  const firstThinking = new AssistantMessageComponent(
+    mixedEndingThinkingMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const secondThinking = new AssistantMessageComponent(
+    thinkingMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const hiddenTool = { constructor: { name: "ToolExecutionComponent" } };
+  const replayChildren = [firstThinking, hiddenTool, secondThinking];
+  InteractiveMode.prototype.renderSessionEntries.call({
+    chatContainer: { children: replayChildren },
+    renderSessionItems() {},
+  }, []);
+  assert.deepEqual(replayChildren, [firstThinking, hiddenTool, secondThinking]);
+  assert.notEqual(
+    firstThinking.contentContainer.children.at(-1)?.constructor?.name,
+    "Spacer",
+    "earlier prose must not add a trailing blank when the message ends in Thinking",
+  );
+  assert.equal(leadingBlankRows(secondThinking, 80), 1);
 });

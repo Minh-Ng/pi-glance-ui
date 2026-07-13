@@ -3,8 +3,8 @@ import { Spacer } from "@earendil-works/pi-tui";
 // Owns Glance's transcript-level blank-line rules as one cohesive unit:
 //   1. visible thinking-only blocks retain exactly one leading blank while
 //      duplicate transcript-level spacers are removed, and
-//   2. a text-bearing assistant message gains exactly one trailing blank before
-//      an immediately-following tool/action-group component (applyActionSeparator).
+//   2. an assistant message ending in prose gains exactly one trailing blank
+//      before an immediately-following tool/action-group component (applyActionSeparator).
 //
 // Both rules are idempotent and self-removing: state is tracked per component
 // via instance-private symbols, so re-running normalize() never stacks duplicate
@@ -56,7 +56,7 @@ export class TranscriptSpacer {
     }
   }
 
-  // Add/remove one trailing blank between prose and a following tool group.
+  // Add/remove one trailing blank between final prose and a following tool group.
   applyActionSeparator(component, next) {
     const container = component?.contentContainer;
     if (!container?.children) return;

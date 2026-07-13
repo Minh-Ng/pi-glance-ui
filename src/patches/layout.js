@@ -67,13 +67,18 @@ export async function patchHiddenThinkingLayout(
       );
   };
 
-  // An assistant message that carries visible prose (text), as opposed to a
-  // thinking-only block. Thinking-only blocks manage their own leading spacer.
+  // Add a prose→tool separator only when prose is the final visible block.
+  // A mixed message can contain prose and then resume Thinking before its tool
+  // call; treating any earlier text as trailing prose creates a second blank
+  // alongside the next Thinking component's own leading spacer.
   const isTextBearingAssistant = (component) => {
     const message = component?.[originalMessage] || component?.lastMessage;
-    return message?.role === "assistant"
-      && Array.isArray(message.content)
-      && message.content.some((item) => item.type === "text" && item.text?.trim());
+    if (message?.role !== "assistant" || !Array.isArray(message.content)) return false;
+    const lastVisible = message.content.findLast(
+      (item) => (item.type === "text" && item.text?.trim())
+        || (item.type === "thinking" && item.thinking?.trim()),
+    );
+    return lastVisible?.type === "text";
   };
 
   const isToolComponent = (component) =>
