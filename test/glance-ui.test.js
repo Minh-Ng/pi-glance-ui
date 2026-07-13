@@ -599,6 +599,9 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     "working-detail auto",
     harness.ctx,
   );
+  // The section-specific collapsed override survives a repeated application of
+  // the same global value. A real Ctrl+O cycle changes the global baseline.
+  workingExpanded.setExpanded(false);
   workingExpanded.setExpanded(true);
   assert.match(plain(workingExpanded.render(200)), /\$ printf working-expanded/);
   await harness.registeredCommands.get("glance-ui").handler(
@@ -1001,6 +1004,12 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   sectionNavigator.selectedIndex = failedToolSectionIndex;
   sectionNavigator.handleInput("\r");
   assert.match(plain(failedTool.render(200)), /▸ Plan · Explored/);
+  failedTool.setExpanded(false);
+  sectionNavigator.handleInput("\r");
+  assert.match(plain(failedTool.render(200)), /▾ Explored/);
+  // Pi repeatedly reapplies its unchanged global toolOutputExpanded value.
+  failedTool.setExpanded(false);
+  assert.match(plain(failedTool.render(200)), /▾ Explored/);
 
   const artifactSectionIndex = sectionNavigator.sections.findIndex(
     (section) => section.label === "Web content ready",

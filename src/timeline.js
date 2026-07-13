@@ -20,6 +20,7 @@ export class ToolTimeline {
   constructor(sectionController) {
     this.sectionController = sectionController;
     this.entriesById = new Map();
+    this.expansionStateByGroupId = new Map();
     this.detachedIds = new Set();
     this.barrierEpoch = 0;
     this.isRebuildingTranscript = false;
@@ -89,10 +90,19 @@ export class ToolTimeline {
 
   finishTranscriptRebuild() {
     this.isRebuildingTranscript = false;
+    const rebuiltGroupIds = new Set(
+      [...this.entriesById.values()]
+        .filter((entry) => entry.isTracked)
+        .map((entry) => entry.group.id),
+    );
+    for (const groupId of this.expansionStateByGroupId.keys()) {
+      if (!rebuiltGroupIds.has(groupId)) this.expansionStateByGroupId.delete(groupId);
+    }
   }
 
   clearTranscript() {
     this.entriesById.clear();
+    this.expansionStateByGroupId.clear();
     this.detachedIds.clear();
     this.barrierEpoch += 1;
     this.lastGroup = undefined;
@@ -119,6 +129,7 @@ export class ToolTimeline {
   registerForTurn(id, category, phase, turnEntries, isActive) {
     const existing = this.entriesById.get(id);
     if (existing) return existing;
+    const restoredExpansion = this.expansionStateByGroupId.get(id);
     const group = this.lastGroup?.category === category
       && this.lastGroup.phase === phase
       && this.lastGroup.barrierEpoch === this.barrierEpoch
@@ -130,9 +141,12 @@ export class ToolTimeline {
         barrierEpoch: this.barrierEpoch,
         entries: [],
         components: new Map(),
-        expandedOverride: undefined,
-        isGloballyExpanded: false,
+        expandedOverride: restoredExpansion?.expandedOverride,
+        isGloballyExpanded: restoredExpansion?.isGloballyExpanded ?? false,
       };
+    if (group !== this.lastGroup && restoredExpansion) {
+      this.rememberExpansion(group);
+    }
     if (group !== this.lastGroup) this.lastGroup = group;
     const entry = {
       id,
@@ -178,6 +192,13 @@ export class ToolTimeline {
     return entry;
   }
 
+  rememberExpansion(group) {
+    this.expansionStateByGroupId.set(group.id, {
+      expandedOverride: group.expandedOverride,
+      isGloballyExpanded: group.isGloballyExpanded,
+    });
+  }
+
   registerGroupSection(group) {
     if (group.inactive) return;
     const isExpanded = () => group.entries.some((entry) => entry.workingCompact)
@@ -193,6 +214,7 @@ export class ToolTimeline {
         if (group.expandedOverride) {
           for (const entry of group.entries) entry.workingCompact = false;
         }
+        this.rememberExpansion(group);
         for (const setExpanded of group.components.values()) {
           setExpanded(group.expandedOverride);
         }
@@ -212,15 +234,22 @@ export class ToolTimeline {
   attachComponent(entry, component, setExpanded) {
     entry.component = component;
     entry.group.components.set(component, setExpanded);
-    entry.group.isGloballyExpanded = Boolean(component.expanded);
+    if (entry.group.expandedOverride === undefined) {
+      entry.group.isGloballyExpanded = Boolean(component.expanded);
+      this.rememberExpansion(entry.group);
+    }
     this.registerGroupSection(entry.group);
   }
 
   setGlobalExpanded(id, isExpanded) {
     const entry = this.entriesById.get(id);
     if (!entry?.isTracked) return;
-    entry.group.isGloballyExpanded = isExpanded;
-    entry.group.expandedOverride = undefined;
+    const nextGlobalExpanded = Boolean(isExpanded);
+    if (entry.group.isGloballyExpanded !== nextGlobalExpanded) {
+      entry.group.expandedOverride = undefined;
+    }
+    entry.group.isGloballyExpanded = nextGlobalExpanded;
+    this.rememberExpansion(entry.group);
     this.registerGroupSection(entry.group);
   }
 
