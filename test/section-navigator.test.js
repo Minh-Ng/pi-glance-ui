@@ -147,6 +147,41 @@ test("short lists render fully with no scroll indicators", () => {
   assert.match(out, /Section 2/);
 });
 
+test("F cycles section-type filters and resets selection", () => {
+  const typedSections = [
+    { id: "plan", kind: "tools", filterType: "plan", label: "Plan · Explored", detail: "plan" },
+    { id: "impl-1", kind: "tools", filterType: "implement", label: "Implement · Changed", detail: "one" },
+    { id: "impl-2", kind: "tools", filterType: "implement", label: "Implement · Changed", detail: "two" },
+    { id: "thinking", kind: "thinking", label: "Thinking", detail: "thought" },
+  ].map((section) => ({
+    ...section,
+    isExpanded: () => false,
+    renderDetail: () => [section.detail],
+    toggle() {},
+  }));
+  const nav = new SectionNavigator({
+    sections: typedSections,
+    theme,
+    onClose() {},
+    requestRender() {},
+    viewportRows: () => 30,
+  });
+
+  assert.match(plain(nav.render(120)), /Sections · All · 4\/4/);
+  nav.selectedIndex = 2;
+  nav.handleInput("f");
+  assert.equal(nav.selectedIndex, 0);
+  assert.deepEqual(nav.sections.map((section) => section.id), ["plan"]);
+  assert.match(plain(nav.render(120)), /Sections · Plan · 1\/4/);
+
+  nav.handleInput("f");
+  assert.deepEqual(nav.sections.map((section) => section.id), ["impl-1", "impl-2"]);
+  const implementView = plain(nav.render(120));
+  assert.match(implementView, /Sections · Implement · 2\/4/);
+  assert.match(implementView, /Implement · Changed/);
+  assert.doesNotMatch(implementView, /Plan · Explored/);
+});
+
 test("Enter toggles the selected section's expansion arrow", () => {
   const nav = navigator(5, 40);
   nav.selectedIndex = 2;
@@ -158,7 +193,7 @@ test("Enter toggles the selected section's expansion arrow", () => {
 test("wide overlays render the selected section in a detail pane", () => {
   const nav = navigator(5, 30);
   let out = plain(nav.render(120));
-  assert.match(out, /Sections · 5 actions · 0 thinking/);
+  assert.match(out, /Sections · All · 5\/5/);
   assert.match(out, /Detail · Section 0/);
   assert.match(out, /Detail for section 0/);
 
@@ -169,11 +204,18 @@ test("wide overlays render the selected section in a detail pane", () => {
   assert.doesNotMatch(out, /Detail for section 0/);
 });
 
+test("wide overlays reserve more width for detail and use 85% viewport height", () => {
+  const nav = navigator(5, 100);
+  const lines = nav.render(120);
+  assert.equal(lines[0].indexOf(" │ "), 32, "left pane uses 28% instead of the previous 38%");
+  assert.equal(lines.length, 83, "navigator body follows the 85% overlay height");
+});
+
 test("narrow overlays prioritize readable selected detail", () => {
   const nav = navigator(5, 30);
   nav.selectedIndex = 3;
   const out = plain(nav.render(80));
-  assert.match(out, /Section detail · 5 actions · 0 thinking · ↑ recent · ↓ older/);
+  assert.match(out, /Section detail · All · 5\/5 · ↑ recent · ↓ older/);
   assert.match(out, /Section 3 \(4\/5\)/);
   assert.match(out, /Detail for section 3/);
   assert.doesNotMatch(out, /Section 2/);

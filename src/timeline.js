@@ -250,6 +250,7 @@ export class ToolTimeline {
     this.sectionController.register({
       id: `tools:${group.id}`,
       kind: "tools",
+      filterType: group.phase,
       label: `${activityToolPhaseLabel(group.phase)} · ${groupLabel(group.category)} · ${group.entries.length} action${group.entries.length === 1 ? "" : "s"}`,
       isExpanded,
       renderDetail: (width) => {

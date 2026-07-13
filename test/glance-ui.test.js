@@ -404,7 +404,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   const taskViewer = harness.getCustomComponent();
   assert.deepEqual(harness.getCustomOptions().overlayOptions, {
     width: "90%",
-    maxHeight: "80%",
+    maxHeight: "85%",
     anchor: "center",
     margin: 1,
   });
