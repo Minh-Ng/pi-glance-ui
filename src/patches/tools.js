@@ -12,6 +12,7 @@ export async function patchCompactToolSpacing(
 ) {
   const baseRenderMethod = Symbol.for("pi-compact-ui.tool-execution-base-render");
   const baseSetExpandedMethod = Symbol.for("pi-compact-ui.tool-execution-base-set-expanded");
+  const baseUpdateDisplayMethod = Symbol.for("pi-compact-ui.tool-execution-base-update-display");
   const nativeComponents = new WeakMap();
   const timing = new WeakMap();
   const moduleUrl = new URL(
@@ -34,15 +35,21 @@ export async function patchCompactToolSpacing(
   transaction?.capture(prototype, [
     "render",
     "setExpanded",
+    "updateDisplay",
     baseRenderMethod,
     baseSetExpandedMethod,
+    baseUpdateDisplayMethod,
   ]);
   if (!prototype[baseRenderMethod]) prototype[baseRenderMethod] = prototype.render;
   if (!prototype[baseSetExpandedMethod]) {
     prototype[baseSetExpandedMethod] = prototype.setExpanded;
   }
+  if (!prototype[baseUpdateDisplayMethod]) {
+    prototype[baseUpdateDisplayMethod] = prototype.updateDisplay;
+  }
   const baseRender = prototype[baseRenderMethod];
   const baseSetExpanded = prototype[baseSetExpandedMethod];
+  const baseUpdateDisplay = prototype[baseUpdateDisplayMethod];
   const renderNative = (component, width) => {
     const toolDefinition = component.toolDefinition;
     const originalDefinition = toolDefinition?.[ORIGINAL_TOOL_DEFINITION];
@@ -128,6 +135,30 @@ export async function patchCompactToolSpacing(
     } finally {
       if (!wasExpanded) baseSetExpanded.call(component, false);
     }
+  };
+
+  const attachTimelineComponent = (component) => {
+    const entry = timeline.register(
+      component.toolCallId,
+      toolCategory(component.toolName, component.args),
+      activityPhaseForTool(component.toolName, component.args),
+    );
+    if (!entry.isTracked) return;
+    timeline.attachComponent(
+      entry,
+      component,
+      (isExpanded) => baseSetExpanded.call(component, isExpanded),
+      (detailWidth) => renderExpandedDetail(component, detailWidth),
+    );
+  };
+
+  // Transcript reconstruction creates tool components without necessarily
+  // rendering off-screen rows. Attach during updateDisplay so /reload restores
+  // action sections even before those rows enter the viewport.
+  prototype.updateDisplay = function compactToolDisplay() {
+    const result = baseUpdateDisplay.call(this);
+    if (isEnabled()) attachTimelineComponent(this);
+    return result;
   };
 
   prototype.setExpanded = function compactToolExpansion(isExpanded) {

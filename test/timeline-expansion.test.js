@@ -32,6 +32,33 @@ function applyPiGlobalExpansion(timeline, component, expanded) {
   component.expanded = entry.group.expandedOverride ?? expanded;
 }
 
+test("reload rebuilds action sections even when tool components never render", () => {
+  const sections = new SectionController();
+  const timeline = new ToolTimeline(sections);
+  const replayMessages = [
+    ...messages,
+    {
+      role: "toolResult",
+      toolCallId: "tool-stable",
+      toolName: "read",
+      content: [{ type: "text", text: "\u001b[31mreloaded file body\u001b[0m" }],
+      details: {},
+      isError: false,
+    },
+  ];
+
+  timeline.rebuildFromMessages(replayMessages);
+  timeline.finishTranscriptRebuild();
+
+  const action = sections.list().find((section) => section.kind === "tools");
+  assert.ok(action, "the action remains navigable without a component render");
+  const detail = action.renderDetail(120).join("\n");
+  assert.match(detail, /read/);
+  assert.match(detail, /README\.md/);
+  assert.match(detail, /reloaded file body/);
+  assert.doesNotMatch(detail, /\u001b/, "fallback detail strips terminal controls");
+});
+
 test("rebuilt tools register alongside Thinking in transcript render order", () => {
   const sections = new SectionController();
   const timeline = new ToolTimeline(sections);

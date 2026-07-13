@@ -8,6 +8,34 @@ import { SettingsPanel } from "./ui/settings-panel.js";
 
 export { loadGlanceUiConfig, saveGlanceUiConfig } from "./config.js";
 
+export function rebuildActionSections({ timeline, sectionController, sessionManager }) {
+  let messages;
+  try {
+    messages = sessionManager?.buildSessionContext?.().messages;
+  } catch (error) {
+    return { rebuilt: false, error: compatibilityError(error), toolCalls: 0, actionSections: 0 };
+  }
+  if (!Array.isArray(messages)) {
+    return { rebuilt: false, error: "session context unavailable", toolCalls: 0, actionSections: 0 };
+  }
+  const toolCalls = messages.reduce(
+    (count, message) => count + (
+      message.role === "assistant" && Array.isArray(message.content)
+        ? message.content.filter((item) => item.type === "toolCall").length
+        : 0
+    ),
+    0,
+  );
+  if (toolCalls === 0) {
+    return { rebuilt: false, error: "no tool calls in active context", toolCalls, actionSections: 0 };
+  }
+  sectionController.removeKinds(["tools"]);
+  timeline.rebuildFromMessages(messages);
+  timeline.finishTranscriptRebuild();
+  const actionSections = sectionController.list().filter((section) => section.kind === "tools").length;
+  return { rebuilt: actionSections > 0, toolCalls, actionSections };
+}
+
 const SHARED_RUNTIME_STATE = Symbol.for("pi-compact-ui.shared-runtime-state");
 const SUPPORTED_PATCH_VERSIONS = new Set(["0.80.6"]);
 const WORKING_DETAIL_MODES = new Set(["auto", "compact", "expanded", "hidden"]);
@@ -89,6 +117,7 @@ export default function glanceUi(pi) {
   let workingDetailMode = persistedConfig.workingDetailMode
     ?? sharedRuntime.workingDetailMode
     ?? "auto";
+  let lastSectionRecovery;
   // Session replacement loads the next extension generation before Pi replays
   // the selected transcript, then emits session_start afterward. Keep already
   // installed wrappers active through that replay only when the new generation
@@ -146,6 +175,9 @@ export default function glanceUi(pi) {
     `enabled: ${enabled ? "on" : "off"} (on|off) — ${enabled ? "compact tool rendering is active" : "native Pi rendering is active"}`,
     `patches: ${patchStatus()} (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer`,
     `working-detail: ${workingDetailMode} (auto|compact|expanded|hidden) — ${workingDetailEffects[workingDetailMode]}`,
+    ...(lastSectionRecovery
+      ? [`sections: ${lastSectionRecovery.actionSections} action groups from ${lastSectionRecovery.toolCalls} calls${lastSectionRecovery.error ? ` — ${lastSectionRecovery.error}` : ""}`]
+      : []),
     "Change: /glance-ui settings <name> <value>",
     "Sections: /sections or Ctrl+Shift+O",
   ].join("\n");
@@ -171,6 +203,13 @@ export default function glanceUi(pi) {
   };
 
   const showSections = async (ctx) => {
+    if (isEnabled()) {
+      lastSectionRecovery = rebuildActionSections({
+        timeline,
+        sectionController,
+        sessionManager: ctx.sessionManager,
+      });
+    }
     const sections = isEnabled() ? sectionController.list() : [];
     if (sections.length === 0) {
       ctx.ui.notify("No collapsible sections yet", "info");
