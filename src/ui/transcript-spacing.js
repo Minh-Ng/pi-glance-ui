@@ -1,8 +1,8 @@
 import { Spacer } from "@earendil-works/pi-tui";
 
 // Owns Glance's transcript-level blank-line rules as one cohesive unit:
-//   1. visible thinking-only blocks retain exactly one leading blank while
-//      duplicate transcript-level spacers are removed, and
+//   1. Thinking blocks use either one-per-block separated spacing or dense
+//      Thinking/tool clusters with outer spacing only, and
 //   2. an assistant message ending in prose gains exactly one trailing blank
 //      before an immediately-following tool/action-group component (applyActionSeparator).
 //
@@ -25,10 +25,20 @@ import { Spacer } from "@earendil-works/pi-tui";
 // separator blank before every replayed tool/action group (visible as double
 // spacing after resume) and could never remove stale ones.
 export class TranscriptSpacer {
-  constructor({ isThinkingOnlyComponent, isTextBearingAssistant, isToolComponent }) {
+  constructor({
+    isThinkingOnlyComponent,
+    startsWithThinkingComponent = isThinkingOnlyComponent,
+    endsWithThinkingComponent = isThinkingOnlyComponent,
+    isTextBearingAssistant,
+    isToolComponent,
+    getTranscriptSpacingMode = () => "separated",
+  }) {
     this.isThinkingOnlyComponent = isThinkingOnlyComponent;
+    this.startsWithThinkingComponent = startsWithThinkingComponent;
+    this.endsWithThinkingComponent = endsWithThinkingComponent;
     this.isTextBearingAssistant = isTextBearingAssistant;
     this.isToolComponent = isToolComponent;
+    this.getTranscriptSpacingMode = getTranscriptSpacingMode;
     this.suppressLeadingSpacer = Symbol.for("pi-glance-ui:suppress-leading-thinking-spacer");
     this.trailingSeparator = Symbol.for("pi-glance-ui:trailing-action-separator");
     this.previousContent = Symbol.for("pi-glance-ui:previous-transcript-content");
@@ -39,20 +49,25 @@ export class TranscriptSpacer {
     return component instanceof Spacer || component?.constructor?.name === "Spacer";
   }
 
-  // Keep one internal leading blank on every visible thinking-only component.
-  // Older generations may have suppressed it, so normalization also repairs
-  // existing transcript components after /reload.
+  // Separated mode keeps one blank before every leading Thinking block. Dense
+  // mode removes that blank only when a prior Thinking/tool continues the same
+  // cluster, retaining one blank at the cluster's outer boundary.
   refreshThinking(component) {
-    if (!component?.contentContainer?.children) return;
-    const isThinking = this.isThinkingOnlyComponent(component);
-    component[this.suppressLeadingSpacer] = false;
-    const first = component.contentContainer.children[0];
-    if (
-      isThinking
-      && !this.isSpacer(first)
-      && component.contentContainer.children.length > 0
-    ) {
-      component.contentContainer.children.unshift(new Spacer(1));
+    const children = component?.contentContainer?.children;
+    if (!Array.isArray(children) || !this.startsWithThinkingComponent(component)) return;
+    const previous = component[this.previousContent];
+    const continuesDenseCluster = this.getTranscriptSpacingMode() === "dense"
+      && previous
+      && (this.isToolComponent(previous) || this.endsWithThinkingComponent(previous));
+    component[this.suppressLeadingSpacer] = Boolean(continuesDenseCluster);
+
+    let leadingCount = 0;
+    while (this.isSpacer(children[leadingCount])) leadingCount += 1;
+    const desired = continuesDenseCluster ? 0 : 1;
+    if (leadingCount < desired && children.length > 0) {
+      children.unshift(new Spacer(1));
+    } else if (leadingCount > desired) {
+      children.splice(0, leadingCount - desired);
     }
   }
 
@@ -76,12 +91,13 @@ export class TranscriptSpacer {
     }
   }
 
-  // Ensure every Thinking child inside one assistant component has exactly one
-  // blank immediately before it. Native Pi already separates Thinking→text but
-  // not text→Thinking, which is why mixed-content continuations looked uneven.
+  // Normalize Thinking children inside one assistant component. Dense mode
+  // removes only Thinking→Thinking interior blanks; text still breaks the
+  // cluster and receives one blank on either side.
   normalizeRenderedThinkingChildren(component, isThinkingChild) {
     const children = component?.contentContainer?.children;
     if (!Array.isArray(children)) return;
+    const dense = this.getTranscriptSpacingMode() === "dense";
     for (let index = 0; index < children.length; index += 1) {
       if (!isThinkingChild(children[index])) continue;
       let separatorStart = index;
@@ -89,12 +105,14 @@ export class TranscriptSpacer {
         separatorStart -= 1;
       }
       const separatorCount = index - separatorStart;
-      if (separatorCount === 0) {
+      const previousVisible = children[separatorStart - 1];
+      const desired = dense && previousVisible && isThinkingChild(previousVisible) ? 0 : 1;
+      if (separatorCount < desired) {
         children.splice(index, 0, new Spacer(1));
         index += 1;
-      } else if (separatorCount > 1) {
-        children.splice(separatorStart, separatorCount - 1);
-        index -= separatorCount - 1;
+      } else if (separatorCount > desired) {
+        children.splice(separatorStart, separatorCount - desired);
+        index -= separatorCount - desired;
       }
     }
   }
@@ -121,7 +139,7 @@ export class TranscriptSpacer {
 
     for (let index = 0; index < children.length; index += 1) {
       const child = children[index];
-      if (this.isSpacer(child) || !this.isThinkingOnlyComponent(child)) continue;
+      if (this.isSpacer(child) || !this.startsWithThinkingComponent(child)) continue;
       if (!this.isSpacer(child.contentContainer?.children?.[0])) continue;
 
       let separatorStart = index;

@@ -105,16 +105,19 @@ test("glance-ui config persists valid settings and tolerates malformed data", ()
       enabled: false,
       patchesVersion: "0.80.6",
       workingDetailMode: "hidden",
+      transcriptSpacing: "dense",
     }, path);
     assert.deepEqual(loadGlanceUiConfig(path), {
       enabled: false,
       patchesVersion: "0.80.6",
       workingDetailMode: "hidden",
+      transcriptSpacing: "dense",
     });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), {
       enabled: false,
       patchesVersion: "0.80.6",
       workingDetailMode: "hidden",
+      transcriptSpacing: "dense",
     });
 
     writeFileSync(path, "not json");
@@ -124,6 +127,7 @@ test("glance-ui config persists valid settings and tolerates malformed data", ()
       enabled: "no",
       patchesVersion: " ",
       workingDetailMode: "invalid",
+      transcriptSpacing: "invalid",
     }));
     assert.deepEqual(loadGlanceUiConfig(path), {});
   } finally {
@@ -171,6 +175,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     enabled: true,
     patchesVersion: "0.80.6",
     workingDetailMode: "auto",
+    transcriptSpacing: "separated",
   });
   await harness.registeredCommands.get("glance-ui").handler("settings", harness.ctx);
   assert.deepEqual(harness.notifications.at(-1), {
@@ -179,6 +184,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
       "enabled: on (on|off) — compact tool rendering is active",
       "patches: on for Pi 0.80.6 (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer",
       "working-detail: auto (auto|compact|expanded|hidden) — only the bottom-most running tool stays compact",
+      "transcript-spacing: separated (dense|separated) — every Thinking block has a leading blank",
       "Change: /glance-ui settings <name> <value>",
       "Sections: /sections or Ctrl+Shift+O",
     ].join("\n"),
@@ -1461,6 +1467,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     enabled: false,
     patchesVersion: "0.80.6",
     workingDetailMode: "compact",
+    transcriptSpacing: "separated",
   });
 
   const reloadHarness = createExtensionHarness();
@@ -1474,6 +1481,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     enabled: true,
     patchesVersion: "0.80.6",
     workingDetailMode: "compact",
+    transcriptSpacing: "separated",
   });
   await emitAsync(reloadHarness, "before_agent_start");
 

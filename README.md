@@ -59,6 +59,8 @@ The section navigator uses a narrow list and larger detail pane across 85% of th
 
 Running tools use `auto` detail by default: the bottom-most running tool stays compact and completed output follows `Ctrl+O`. Other modes are covered in the [Power User Guide](docs/power-user-guide.md#running-tools).
 
+Transcript spacing is configurable: `transcript-spacing dense` keeps contiguous Thinking/action clusters tight with only outer spacing, while `separated` places a blank before each Thinking block. See the [Power User Guide](docs/power-user-guide.md#transcript-spacing).
+
 Settings are saved to `~/.pi/agent/glance-ui.json`.
 
 ## Troubleshooting

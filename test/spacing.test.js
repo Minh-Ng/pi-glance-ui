@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -479,4 +479,21 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
     "earlier prose must not add a trailing blank when the message ends in Thinking",
   );
   assert.equal(leadingBlankRows(secondThinking, 80), 1);
+
+  await target.commands.get("glance-ui").handler(
+    "settings transcript-spacing dense",
+    target.ctx,
+  );
+  assert.equal(leadingBlankRows(firstThinking, 80), 1, "dense cluster keeps its outer blank");
+  assert.equal(leadingBlankRows(secondThinking, 80), 0, "dense tool→Thinking continuation is contiguous");
+  assert.equal(
+    JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")).transcriptSpacing,
+    "dense",
+  );
+
+  await target.commands.get("glance-ui").handler(
+    "settings transcript-spacing separated",
+    target.ctx,
+  );
+  assert.equal(leadingBlankRows(secondThinking, 80), 1, "separated mode restores the blank live");
 });

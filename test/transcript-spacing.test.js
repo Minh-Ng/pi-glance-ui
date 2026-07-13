@@ -4,10 +4,13 @@ import { Spacer } from "@earendil-works/pi-tui";
 
 import { TranscriptSpacer } from "../src/ui/transcript-spacing.js";
 
-const spacer = () => new TranscriptSpacer({
+const spacer = (mode = "separated") => new TranscriptSpacer({
   isThinkingOnlyComponent: (c) => c?.type === "thinking",
+  startsWithThinkingComponent: (c) => c?.type === "thinking",
+  endsWithThinkingComponent: (c) => c?.type === "thinking",
   isTextBearingAssistant: (c) => c?.type === "prose",
   isToolComponent: (c) => c?.constructor?.name === "ToolExecutionComponent",
+  getTranscriptSpacingMode: typeof mode === "function" ? mode : () => mode,
 });
 
 const prose = () => ({ type: "prose", contentContainer: { children: [{}] } });
@@ -95,6 +98,57 @@ test("mixed assistant content gets exactly one blank before every Thinking child
   assert.ok([0, 2, 4, 6].every((index) => isSpacer(normalized[index])));
   normalize();
   assert.equal(component.contentContainer.children.length, 8, "repeated normalization never stacks");
+});
+
+test("dense mode keeps one cluster boundary and removes internal Thinking/tool gaps", () => {
+  let mode = "dense";
+  const s = spacer(() => mode);
+  const first = thinking(true);
+  const second = thinking(true);
+  const hiddenTool = tool();
+  const children = [user(), first, hiddenTool, second];
+
+  s.normalize(children);
+  assert.equal(leading(first), true, "cluster starts with one outer blank");
+  assert.equal(leading(second), false, "tool→Thinking continuation has no internal blank");
+
+  mode = "separated";
+  s.normalize(children);
+  assert.equal(leading(first), true);
+  assert.equal(leading(second), true, "switching modes restores separated spacing");
+});
+
+test("dense mode compacts adjacent Thinking children but preserves text boundaries", () => {
+  const s = spacer("dense");
+  const firstThinking = {};
+  const secondThinking = {};
+  const proseChild = {};
+  const thirdThinking = {};
+  const component = {
+    contentContainer: {
+      children: [
+        firstThinking,
+        new Spacer(1),
+        secondThinking,
+        new Spacer(1),
+        proseChild,
+        thirdThinking,
+      ],
+    },
+  };
+  const thinkingChildren = new Set([firstThinking, secondThinking, thirdThinking]);
+  s.normalizeRenderedThinkingChildren(component, (child) => thinkingChildren.has(child));
+
+  const normalized = component.contentContainer.children;
+  assert.deepEqual(
+    normalized.filter((child) => !isSpacer(child)),
+    [firstThinking, secondThinking, proseChild, thirdThinking],
+  );
+  assert.equal(normalized[0].constructor.name, "Spacer", "one blank above cluster");
+  assert.equal(normalized[2], secondThinking, "no blank between adjacent Thinking blocks");
+  assert.equal(normalized[3].constructor.name, "Spacer", "one blank below cluster before prose");
+  assert.equal(normalized[5].constructor.name, "Spacer", "text starts a new Thinking cluster");
+  assert.equal(normalized.length, 7);
 });
 
 test("thinking removes duplicate transcript spacers but keeps its internal blank", () => {

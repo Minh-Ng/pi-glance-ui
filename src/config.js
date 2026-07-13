@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 const WORKING_DETAIL_MODES = new Set(["auto", "compact", "expanded", "hidden"]);
+const TRANSCRIPT_SPACING_MODES = new Set(["dense", "separated"]);
 
 function glanceUiConfigPath() {
   return process.env.PI_GLANCE_UI_CONFIG || join(homedir(), ".pi", "agent", "glance-ui.json");
@@ -19,6 +20,9 @@ export function loadGlanceUiConfig(path = glanceUiConfigPath()) {
         : {}),
       ...(WORKING_DETAIL_MODES.has(parsed.workingDetailMode)
         ? { workingDetailMode: parsed.workingDetailMode }
+        : {}),
+      ...(TRANSCRIPT_SPACING_MODES.has(parsed.transcriptSpacing)
+        ? { transcriptSpacing: parsed.transcriptSpacing }
         : {}),
     };
   } catch {

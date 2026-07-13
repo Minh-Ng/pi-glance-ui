@@ -5,7 +5,8 @@ All notable changes to Pi Glance UI will be documented here.
 ## Unreleased
 
 - Clarify section filtering with an explicit `Filter:` header and a spaced lowercase `f: cycle filter` footer hint.
-- Keep exactly one blank row before every visible Thinking block while removing duplicate transcript spacers, including across `/reload` and replay.
+- Normalize separated spacing to exactly one blank before every visible Thinking block, including across `/reload` and replay.
+- Add persistent `transcript-spacing` modes: `dense` compacts contiguous Thinking/action clusters to outer spacing only, while `separated` preserves a blank before every Thinking block.
 
 ## 0.2.8
 

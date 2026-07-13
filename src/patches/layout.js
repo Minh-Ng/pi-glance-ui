@@ -28,6 +28,7 @@ export async function patchHiddenThinkingLayout(
   {
     transaction = new PatchTransaction(),
     codingAgentEntryUrl = runningPiCodingAgentEntry(),
+    getTranscriptSpacingMode = () => "separated",
   } = {},
 ) {
   const baseUpdateMethod = Symbol.for("pi-compact-ui.base-update-content");
@@ -67,19 +68,26 @@ export async function patchHiddenThinkingLayout(
       );
   };
 
+  const visibleAssistantContent = (component) => {
+    const message = component?.[originalMessage] || component?.lastMessage;
+    if (message?.role !== "assistant" || !Array.isArray(message.content)) return [];
+    return message.content.filter(
+      (item) => (item.type === "text" && item.text?.trim())
+        || (item.type === "thinking" && item.thinking?.trim()),
+    );
+  };
+
+  const startsWithThinkingAssistant = (component) =>
+    visibleAssistantContent(component)[0]?.type === "thinking";
+  const endsWithThinkingAssistant = (component) =>
+    visibleAssistantContent(component).at(-1)?.type === "thinking";
+
   // Add a prose→tool separator only when prose is the final visible block.
   // A mixed message can contain prose and then resume Thinking before its tool
   // call; treating any earlier text as trailing prose creates a second blank
   // alongside the next Thinking component's own leading spacer.
-  const isTextBearingAssistant = (component) => {
-    const message = component?.[originalMessage] || component?.lastMessage;
-    if (message?.role !== "assistant" || !Array.isArray(message.content)) return false;
-    const lastVisible = message.content.findLast(
-      (item) => (item.type === "text" && item.text?.trim())
-        || (item.type === "thinking" && item.thinking?.trim()),
-    );
-    return lastVisible?.type === "text";
-  };
+  const isTextBearingAssistant = (component) =>
+    visibleAssistantContent(component).at(-1)?.type === "text";
 
   const isToolComponent = (component) =>
     component?.constructor?.name === "ToolExecutionComponent";
@@ -88,8 +96,11 @@ export async function patchHiddenThinkingLayout(
   // bookkeeping live in one cohesive unit; see TranscriptSpacer.
   const transcriptSpacer = new TranscriptSpacer({
     isThinkingOnlyComponent,
+    startsWithThinkingComponent: startsWithThinkingAssistant,
+    endsWithThinkingComponent: endsWithThinkingAssistant,
     isTextBearingAssistant,
     isToolComponent,
+    getTranscriptSpacingMode,
   });
 
   const getThinkingState = (component) => {
@@ -342,6 +353,11 @@ export async function patchHiddenThinkingLayout(
             child.invalidate?.();
           }
         }
+        transcriptSpacer.normalizeRenderedThinkingChildren(
+          this,
+          (child) => child?.[compactThinkingRawText] !== undefined,
+        );
+        transcriptSpacer.refreshThinking(this);
       }
       return baseRender.call(this, width);
     };
