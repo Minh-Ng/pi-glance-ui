@@ -47,18 +47,37 @@ test("separator is removed when the successor is not a tool or is absent", () =>
   assert.equal(trailing(p), false, "removed when prose is last");
 });
 
-test("thinking-only collapses its leading blank unless it opens a turn", () => {
+test("thinking-only keeps exactly one leading blank after any visible block", () => {
   const s = spacer();
-  // After prose (not a user boundary) -> leading blank suppressed.
-  const t1 = thinking(true);
-  s.normalize([prose(), t1]);
-  assert.equal(leading(t1), false, "suppressed after non-user content");
-  // After a user message -> leading blank preserved (restored if once removed).
-  const t2 = thinking(true);
-  s.normalize([prose(), t2]);
-  assert.equal(leading(t2), false);
-  s.normalize([user(), t2]);
-  assert.equal(leading(t2), true, "restored when following a user boundary");
+  const afterProse = thinking(false);
+  s.normalize([prose(), afterProse]);
+  assert.equal(leading(afterProse), true, "repairs a missing blank after prose");
+  assert.equal(afterProse.contentContainer.children.length, 2);
+
+  const afterUser = thinking(true);
+  s.normalize([user(), afterUser]);
+  assert.equal(leading(afterUser), true, "preserves the turn-opening blank");
+  assert.equal(afterUser.contentContainer.children.length, 2);
+});
+
+test("thinking removes duplicate transcript spacers but keeps its internal blank", () => {
+  const s = spacer();
+  const first = thinking(true);
+  const second = thinking(true);
+  const children = [first, new Spacer(1), new Spacer(1), second];
+
+  s.normalize(children);
+  assert.deepEqual(children, [first, second], "transcript-level duplicate rows are removed");
+  assert.equal(leading(first), true);
+  assert.equal(leading(second), true);
+  s.normalize(children);
+  assert.deepEqual(children, [first, second], "re-normalizing is idempotent");
+  assert.equal(second.contentContainer.children.length, 2, "internal blank never stacks");
+
+  children.splice(1, 0, new Spacer(1)); // native replay reintroduces a boundary row
+  spacer().normalize(children); // fresh /reload generation
+  assert.deepEqual(children, [first, second], "fresh generation removes the duplicate again");
+  assert.equal(second.contentContainer.children.length, 2, "reload still leaves exactly one blank");
 });
 
 test("spacers between entries are ignored when computing adjacency", () => {
@@ -92,10 +111,12 @@ test("a new generation removes a separator added by a prior generation", () => {
   assert.equal(trailing(p), false, "stale separator from prior generation must be removed");
 });
 
-test("thinking suppression state survives the generation handoff", () => {
-  const t = thinking(true);
+test("thinking spacing survives the generation handoff without stacking", () => {
+  const t = thinking(false);
   spacer().normalize([prose(), t]);
-  assert.equal(leading(t), false);
+  assert.equal(leading(t), true);
+  assert.equal(t.contentContainer.children.length, 2);
   spacer().normalize([user(), t]);
-  assert.equal(leading(t), true, "new generation must restore a blank the old one suppressed");
+  assert.equal(leading(t), true);
+  assert.equal(t.contentContainer.children.length, 2, "new generation must not stack a blank");
 });

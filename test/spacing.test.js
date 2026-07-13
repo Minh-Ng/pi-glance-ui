@@ -116,7 +116,7 @@ test("a text-bearing message gains one blank line before a following action grou
   assert.equal(trailingSpacers(prose), 0, "separator removed when the message is last");
 });
 
-test("only thinking-only blocks collapse leading spacing; text-bearing messages match native", async (t) => {
+test("compact assistant rendering preserves native text-bearing spacing", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-parity-"));
   const previousConfig = process.env.PI_GLANCE_UI_CONFIG;
   process.env.PI_GLANCE_UI_CONFIG = join(directory, "glance-ui.json");
@@ -185,14 +185,16 @@ test("only thinking-only blocks collapse leading spacing; text-bearing messages 
     "thinking+text must match native leading spacing");
   assert.deepEqual(glanceRows.textOnly, nativeRows.textOnly,
     "text-only must match native leading spacing");
-  // The only intentional divergence: thinking-only blocks collapse their blank.
+  // Before chat-level transcript normalization, compact Thinking rendering may
+  // use fewer rows than native. The boundary test below enforces exactly one
+  // visible blank once the component is attached to the transcript.
   assert.ok(
     glanceRows.thinkingOnly.every((n, i) => n <= nativeRows.thinkingOnly[i]),
     "thinking-only must not add blank rows vs native",
   );
   assert.ok(
     glanceRows.thinkingOnly.some((n, i) => n < nativeRows.thinkingOnly[i]),
-    "thinking-only should collapse at least one native blank row",
+    "compact Thinking should use fewer rows before transcript normalization",
   );
 });
 
@@ -270,7 +272,7 @@ test("live: prose→action separator lands in the same frame the tool row stream
   );
 });
 
-test("Thinking spacing follows transcript boundaries live and after reconstruction", async (t) => {
+test("Thinking keeps exactly one blank across transcript boundaries live and after reconstruction", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-spacing-"));
   const previousConfig = process.env.PI_GLANCE_UI_CONFIG;
   process.env.PI_GLANCE_UI_CONFIG = join(directory, "glance-ui.json");
@@ -327,22 +329,22 @@ test("Thinking spacing follows transcript boundaries live and after reconstructi
     {
       label: "tool execution",
       create: () => ({ constructor: { name: "ToolExecutionComponent" } }),
-      blankRows: 0,
+      blankRows: 1,
     },
     {
       label: "assistant text",
       create: () => ({ constructor: { name: "AssistantMessageComponent" } }),
-      blankRows: 0,
+      blankRows: 1,
     },
     {
       label: "custom artifact",
       create: () => ({ constructor: { name: "CustomMessageComponent" } }),
-      blankRows: 0,
+      blankRows: 1,
     },
     {
       label: "runtime notice",
       create: () => ({ constructor: { name: "RuntimeNotice" } }),
-      blankRows: 0,
+      blankRows: 1,
     },
   ];
 

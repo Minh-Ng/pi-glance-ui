@@ -5,6 +5,7 @@ All notable changes to Pi Glance UI will be documented here.
 ## Unreleased
 
 - Clarify section filtering with an explicit `Filter:` header and a spaced lowercase `f: cycle filter` footer hint.
+- Keep exactly one blank row before every visible Thinking block while removing duplicate transcript spacers, including across `/reload` and replay.
 
 ## 0.2.8
 

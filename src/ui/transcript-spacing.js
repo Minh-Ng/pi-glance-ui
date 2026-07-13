@@ -1,8 +1,8 @@
 import { Spacer } from "@earendil-works/pi-tui";
 
 // Owns Glance's transcript-level blank-line rules as one cohesive unit:
-//   1. thinking-only blocks collapse their leading blank unless they follow a
-//      user boundary (refreshThinking), and
+//   1. visible thinking-only blocks retain exactly one leading blank while
+//      duplicate transcript-level spacers are removed, and
 //   2. a text-bearing assistant message gains exactly one trailing blank before
 //      an immediately-following tool/action-group component (applyActionSeparator).
 //
@@ -32,29 +32,23 @@ export class TranscriptSpacer {
     this.suppressLeadingSpacer = Symbol.for("pi-glance-ui:suppress-leading-thinking-spacer");
     this.trailingSeparator = Symbol.for("pi-glance-ui:trailing-action-separator");
     this.previousContent = Symbol.for("pi-glance-ui:previous-transcript-content");
+    this.collapsedThinkingSeparators = Symbol.for("pi-glance-ui:collapsed-thinking-separators");
   }
 
   isSpacer(component) {
     return component instanceof Spacer || component?.constructor?.name === "Spacer";
   }
 
-  // Suppress a thinking-only block's leading blank unless it opens a turn (i.e.
-  // follows a user message or nothing). Restores the blank when suppression no
-  // longer applies but was previously in effect.
+  // Keep one internal leading blank on every visible thinking-only component.
+  // Older generations may have suppressed it, so normalization also repairs
+  // existing transcript components after /reload.
   refreshThinking(component) {
     if (!component?.contentContainer?.children) return;
-    const wasSuppressed = Boolean(component[this.suppressLeadingSpacer]);
-    const previous = component[this.previousContent];
-    const followsUserBoundary = !previous
-      || previous.constructor?.name === "UserMessageComponent";
-    const shouldSuppress = this.isThinkingOnlyComponent(component) && !followsUserBoundary;
-    component[this.suppressLeadingSpacer] = shouldSuppress;
+    const isThinking = this.isThinkingOnlyComponent(component);
+    component[this.suppressLeadingSpacer] = false;
     const first = component.contentContainer.children[0];
-    if (shouldSuppress && this.isSpacer(first)) {
-      component.contentContainer.children.shift();
-    } else if (
-      !shouldSuppress
-      && wasSuppressed
+    if (
+      isThinking
       && !this.isSpacer(first)
       && component.contentContainer.children.length > 0
     ) {
@@ -82,9 +76,50 @@ export class TranscriptSpacer {
     }
   }
 
-  // Single pass: record each non-spacer child's predecessor, refresh its
-  // thinking spacer, and manage the trailing separator on the predecessor.
+  // Pi can provide both a transcript-level spacer and a Thinking component's
+  // own leading spacer. Keep the component spacer as the single visible blank
+  // and temporarily remove any transcript-level duplicates. Store removed
+  // objects on the component so a later content-type change can restore them,
+  // including after /reload creates a fresh TranscriptSpacer generation.
+  normalizeThinkingBoundaries(children) {
+    for (let index = 0; index < children.length; index += 1) {
+      const child = children[index];
+      const removed = child?.[this.collapsedThinkingSeparators];
+      if (!Array.isArray(removed) || removed.length === 0) continue;
+      if (
+        !this.isSpacer(children[index - 1])
+        && !this.isSpacer(child.contentContainer?.children?.[0])
+      ) {
+        children.splice(index, 0, ...removed);
+        index += removed.length;
+      }
+      child[this.collapsedThinkingSeparators] = undefined;
+    }
+
+    for (let index = 0; index < children.length; index += 1) {
+      const child = children[index];
+      if (this.isSpacer(child) || !this.isThinkingOnlyComponent(child)) continue;
+      if (!this.isSpacer(child.contentContainer?.children?.[0])) continue;
+
+      let separatorStart = index;
+      while (separatorStart > 0 && this.isSpacer(children[separatorStart - 1])) {
+        separatorStart -= 1;
+      }
+      const separatorCount = index - separatorStart;
+      if (separatorCount > 0) {
+        child[this.collapsedThinkingSeparators] = children.splice(
+          separatorStart,
+          separatorCount,
+        );
+        index -= separatorCount;
+      }
+    }
+  }
+
+  // Single pass: refresh each Thinking spacer and manage the trailing
+  // prose→tool separator on the predecessor.
   normalize(children = []) {
+    this.normalizeThinkingBoundaries(children);
     let previous;
     for (const child of children) {
       if (this.isSpacer(child)) continue;

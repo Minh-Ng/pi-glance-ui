@@ -1244,7 +1244,12 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     stripVTControlCharacters(firstConsecutiveThinkingLines.at(-1)),
     /First consecutive thought/,
   );
-  assert.notEqual(stripVTControlCharacters(secondConsecutiveThinkingLines[0]), "");
+  assert.equal(stripVTControlCharacters(secondConsecutiveThinkingLines[0]), "");
+  assert.notEqual(
+    stripVTControlCharacters(secondConsecutiveThinkingLines[1]),
+    "",
+    "consecutive Thinking has exactly one blank, not two",
+  );
   assert.match(plain(secondConsecutiveThinkingLines).trimStart(), /^○ ▸ Thinking/);
   assert.match(
     stripVTControlCharacters(secondConsecutiveThinkingLines.at(-1)),
@@ -1260,13 +1265,18 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     stripVTControlCharacters(consecutiveThinkingChildren[0].render(200)[0]),
     "",
   );
-  assert.notEqual(
+  assert.equal(
     stripVTControlCharacters(consecutiveThinkingChildren[1].render(200)[0]),
     "",
   );
   consecutiveThinkingChildren[0].updateContent(consecutiveThinkingEntries[0].message);
   const restoredConsecutiveThinkingLines = consecutiveThinkingChildren[1].render(200);
-  assert.notEqual(stripVTControlCharacters(restoredConsecutiveThinkingLines[0]), "");
+  assert.equal(stripVTControlCharacters(restoredConsecutiveThinkingLines[0]), "");
+  assert.notEqual(
+    stripVTControlCharacters(restoredConsecutiveThinkingLines[1]),
+    "",
+    "restoring adjacency must not double the blank",
+  );
   assert.match(plain(restoredConsecutiveThinkingLines).trimStart(), /^○ ▸ Thinking/);
 
   const rebuiltToolComponents = [];
