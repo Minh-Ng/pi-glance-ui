@@ -24,13 +24,51 @@ src/
 
 `src/index.js` is the Pi extension entry and the facade used by tests. Patch modules remain dependency leaves; they must not import `src/index.js`.
 
-## Private renderer hooks
+## Why private patches exist
 
-The extension wraps public built-in tool definitions and patches private Pi interactive components for transcript layout. Private paths are unsupported and can change in any Pi release.
+Pi's public extension API can register replacement tool definitions with custom `renderCall` and `renderResult` functions. Glance UI uses that API for compact built-in tool summaries. It also supports renderers for extension-owned custom messages and entries, but it does not provide hooks that replace or decorate Pi's native transcript components.
 
-Patch installation order in `patchHiddenThinkingLayout()` is significant. Per-install `WeakMap`, `WeakSet`, counters, and generation state must stay inside their owning patch closure. Installation snapshots exact prototype descriptors and rolls them back in reverse order if any later installer, probe, or assistant stage fails; this also preserves wrappers from a prior hot-reload generation.
+The missing hooks matter because Glance UI changes native content rather than adding a separate status panel:
+
+| Patch area | Behavior it enables | Missing public capability |
+| --- | --- | --- |
+| `layout.js` | Compact native Thinking, per-section expansion, and `Ctrl+T`/`Ctrl+O` integration | Native assistant-message renderer and transcript expansion lifecycle |
+| `tools.js` | Group headers and compact spacing around Pi's assembled tool rows while preserving native expanded output | Post-assembly native tool-row renderer/layout hook |
+| `custom-messages.js` | Artifact grouping and expansion in the original transcript position | Native custom-message component decorator |
+| `runtime-errors.js` | Compact runtime notices and errors with reconstructed-session behavior | Native runtime-message renderer and reconstruction hook |
+| `chrome.js` | User-message and footer spacing | Native user-message and footer layout hooks |
+| `markdown.js` | Compact headings and fenced code in Pi-rendered Markdown | Native Markdown renderer decorator or presentation options |
+
+Replacing these rows with extension-owned messages or widgets is not equivalent: Pi would still render the native content, the replacement could be duplicated or reordered, and built-in expansion and reconstructed-session behavior would be lost. Maintaining a Pi fork would avoid prototype patching but would require users to replace their Pi installation. Guarded runtime patches keep Glance UI installable as an extension and do not modify files in Pi's installation.
+
+## Patch safety contract
+
+Private paths are unsupported and can change in any Pi release. Glance UI therefore treats each supported Pi version as an explicit compatibility target:
+
+- Patch installation waits until `session_start`, after Pi's interactive theme exists.
+- Structural probes verify every private component and method before the transaction commits.
+- Installation snapshots exact prototype descriptors and rolls them back in reverse order if any installer, probe, or assistant stage fails.
+- A failed private transaction emits a warning and leaves public compact tool definitions available.
+- `/glance-ui off` makes installed wrappers delegate to Pi's native behavior immediately.
+- Release requirements pin the Pi versions exercised by unit, rollback, benchmark, and fresh-install startup tests.
+- Patches mutate prototypes only in the running process; they never edit Pi's installed source files.
+
+Patch installation order in `patchHiddenThinkingLayout()` is significant. Per-install `WeakMap`, `WeakSet`, counters, and generation state must stay inside their owning patch closure. Rollback must continue to preserve wrappers from a prior hot-reload generation.
 
 The `pi-compact-ui.*` `Symbol.for()` names are intentionally retained for hot-reload compatibility with earlier builds. Do not rename them without migration coverage.
+
+## Removing private patches
+
+Remove a patch area when Pi exposes a documented, stable public API that provides its behavior without importing a private module path or writing to a native prototype. Removal can happen one area at a time; the public tool-definition overrides do not need to be removed with the private patches.
+
+The private patch layer is fully removable when public APIs provide all of the following:
+
+1. Renderer replacement or decoration for native assistant/Thinking, user, custom, runtime-error, footer, Markdown, and assembled tool-execution components.
+2. Read/write access to native global expansion state and Thinking visibility, including `Ctrl+O`, `Ctrl+T`, per-section overrides, invalidation, and rerendering.
+3. Component lifecycle hooks that work during live streaming, transcript reconstruction, session switching, and extension reload.
+4. A supported way to preserve native expanded tool output and terminal-image row geometry while changing compact layout.
+
+Before deleting the old implementation, a patchless build must pass equivalent behavior, reconstruction, terminal-image, disabled-mode, performance, and fresh-install startup coverage on every supported Pi version. Completion means production code contains no private Pi path imports, native prototype writes, or compatibility symbols retained solely for the removed patch.
 
 ## Expanded-rendering invariant
 

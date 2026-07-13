@@ -16,7 +16,7 @@ A [Pi](https://pi.dev) extension that makes long coding transcripts easier to sc
 - Tightens transcript spacing and simplifies Markdown headings and fenced code blocks.
 - Probes private renderer compatibility at startup and warns when optional layout features are unavailable.
 
-Glance UI changes transcript presentation only. It does not change how tools execute or what Pi stores in a session.
+Glance UI changes transcript presentation only. It does not change how tools execute or what Pi stores in a session. Pi's public extension API supports custom tool rendering but not replacement of native transcript renderers, so the remaining presentation features use guarded, in-memory compatibility patches. See [Why private patches exist](docs/architecture.md#why-private-patches-exist).
 
 ## Requirements
 
@@ -53,7 +53,7 @@ Settings are saved to `~/.pi/agent/glance-ui.json`.
 
 - **Need one hidden result?** Open `/sections` and expand that action group.
 - **Want Pi's original presentation?** Run `/glance-ui off`. Existing and new transcript components switch immediately; `/glance-ui on` restores compact rendering.
-- **See “layout extras unavailable”?** A private renderer compatibility probe failed. Compact tool summaries remain available where compatible, but some presentation features may already be active.
+- **See “layout extras unavailable”?** A private renderer compatibility probe failed. The private layout transaction was rolled back; public compact tool summaries remain available where compatible.
 - **Setting was not saved?** Check that `~/.pi/agent` is writable. Glance UI reports when a change is session-only.
 
 ## Power users
