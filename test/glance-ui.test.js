@@ -177,7 +177,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     message: [
       "Glance UI settings",
       "enabled: on (on|off) — compact tool rendering is active",
-      "patches: on for Pi 0.80.6 (on|off) — optional native transcript layout patches",
+      "patches: on for Pi 0.80.6 (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer",
       "working-detail: auto (auto|compact|expanded|hidden) — only the bottom-most running tool stays compact",
       "Change: /glance-ui settings <name> <value>",
       "Sections: /sections or Ctrl+Shift+O",

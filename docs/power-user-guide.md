@@ -2,6 +2,10 @@
 
 This guide covers detailed display behavior and configuration. Most users only need the [README](../README.md).
 
+## Required patched mode
+
+Run `/glance-ui patches on` and approve the exact supported Pi version to activate the complete UI. Confirm `/glance-ui settings` reports `patches: on for Pi <version>`. Without patched mode, Glance UI is limited to public compact rendering for built-in tools: Thinking, artifacts/custom messages, assistant/runtime errors, rendererless custom tools, and the complete section viewer are unavailable. Approval is invalidated by a Pi version change and must not be copied between installations.
+
 ## Compact transcript behavior
 
 Glance UI formats existing Pi transcript content; it does not summarize with a second model or change tool execution.
@@ -12,7 +16,7 @@ Public compact rendering is active by default. It:
 - groups adjacent actions by phase and category;
 - keeps complete built-in tool content available through expansion.
 
-After explicit private-patch consent, Glance UI also formats the latest visible Thinking prose as a tree and makes native artifacts and other transcript sections available through expansion.
+With the required private-patch consent active, Glance UI also formats the latest visible Thinking prose as a tree and makes native artifacts and other transcript sections available through expansion.
 
 ### Phases and categories
 
@@ -85,7 +89,7 @@ Settings default to `~/.pi/agent/glance-ui.json`. Set `PI_GLANCE_UI_CONFIG` to c
 
 `/glance-ui patches off` immediately makes installed private wrappers delegate to native layout while retaining public compact tools; after restart, no private prototype patches are installed. `/glance-ui off` also disables compact tools and restores native Pi presentation. Re-enable public rendering with `/glance-ui on`; no reload is required.
 
-## Optional patched presentation
+## Required patches for the complete presentation
 
 After `/glance-ui patches on` is confirmed for the running Pi version, Glance UI also:
 
