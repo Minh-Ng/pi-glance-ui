@@ -39,11 +39,14 @@ export class SectionController {
 }
 
 export class SectionNavigator {
-  constructor({ sections, theme, onClose, requestRender }) {
+  constructor({ sections, theme, onClose, requestRender, viewportRows }) {
     this.sections = sections;
     this.theme = theme;
     this.onClose = onClose;
     this.requestRender = requestRender;
+    // Optional () => terminal rows, used to window the list to the overlay's
+    // visible height. Falls back to a conservative default when unavailable.
+    this.viewportRows = viewportRows;
     this.selectedIndex = 0;
   }
 
@@ -69,11 +72,28 @@ export class SectionNavigator {
   }
 
   render(width) {
-    const lines = [
-      this.theme.fg("accent", this.theme.bold("Sections")),
-      "",
-    ];
-    for (let index = 0; index < this.sections.length; index += 1) {
+    const truncate = (line) => truncateToWidth(line, Math.max(1, width), "…");
+    const total = this.sections.length;
+    // render(width) is not given a height, so derive the overlay's usable rows
+    // from the terminal height (the overlay opens at maxHeight 70%). Without a
+    // window the list overflows the clipped overlay, so the selection — and the
+    // visible effect of toggling it — scrolls off the bottom of the page.
+    const terminalRows = Math.max(8, this.viewportRows?.() ?? 24);
+    const overlayRows = Math.max(6, Math.floor(terminalRows * 0.7) - 2);
+    const capacity = Math.max(3, overlayRows - 4); // reserve header + footer
+    const scrolling = total > capacity;
+    const listRows = scrolling ? Math.max(1, capacity - 2) : total; // reserve ↑/↓ hints
+    const start = scrolling
+      ? Math.min(
+        Math.max(0, this.selectedIndex - Math.floor(listRows / 2)),
+        Math.max(0, total - listRows),
+      )
+      : 0;
+    const end = Math.min(total, start + listRows);
+
+    const lines = [this.theme.fg("accent", this.theme.bold("Sections")), ""];
+    if (start > 0) lines.push(this.theme.fg("dim", `  ↑ ${start} more`));
+    for (let index = start; index < end; index += 1) {
       const section = this.sections[index];
       const selection = index === this.selectedIndex ? ">" : " ";
       const arrow = section.isExpanded() ? "▾" : "▸";
@@ -82,8 +102,9 @@ export class SectionNavigator {
         ? this.theme.fg("accent", label)
         : this.theme.fg("text", label));
     }
+    if (end < total) lines.push(this.theme.fg("dim", `  ↓ ${total - end} more`));
     lines.push("", this.theme.fg("dim", "↑↓ select · Enter toggle · Esc close"));
-    return lines.map((line) => truncateToWidth(line, Math.max(1, width), "…"));
+    return lines.map(truncate);
   }
 
   invalidate() {}

@@ -138,6 +138,7 @@ export default function glanceUi(pi) {
       theme,
       onClose: () => done(undefined),
       requestRender: () => _tui.requestRender(),
+      viewportRows: () => _tui?.terminal?.rows,
     }), {
       overlay: true,
       overlayOptions: {
