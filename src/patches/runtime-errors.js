@@ -6,10 +6,12 @@ export async function patchCompactRuntimeErrors(
   timeline,
   sectionController,
   resetAssistantSections,
+  recordTranscriptAdjacency,
   normalizeConsecutiveThinkingSpacing,
   isEnabled,
   transaction,
 ) {
+  const baseHandleEventMethod = Symbol.for("pi-compact-ui.base-handle-event");
   const baseRenderSessionEntriesMethod = Symbol.for("pi-compact-ui.base-render-session-entries");
   const baseShowErrorMethod = Symbol.for("pi-compact-ui.base-show-error");
   const baseShowWarningMethod = Symbol.for("pi-compact-ui.base-show-warning");
@@ -28,20 +30,24 @@ export async function patchCompactRuntimeErrors(
   ]);
   const prototype = InteractiveMode.prototype;
   if (
-    typeof prototype.renderSessionEntries !== "function"
+    typeof prototype.handleEvent !== "function"
+    || typeof prototype.renderSessionEntries !== "function"
     || typeof prototype.showError !== "function"
     || typeof prototype.showWarning !== "function"
   ) {
     throw new Error("interactive error rendering has changed");
   }
   transaction?.capture(prototype, [
+    "handleEvent",
     "renderSessionEntries",
     "showError",
     "showWarning",
+    baseHandleEventMethod,
     baseRenderSessionEntriesMethod,
     baseShowErrorMethod,
     baseShowWarningMethod,
   ]);
+  if (!prototype[baseHandleEventMethod]) prototype[baseHandleEventMethod] = prototype.handleEvent;
   if (!prototype[baseRenderSessionEntriesMethod]) {
     prototype[baseRenderSessionEntriesMethod] = prototype.renderSessionEntries;
   }
@@ -49,9 +55,19 @@ export async function patchCompactRuntimeErrors(
   if (!prototype[baseShowWarningMethod]) {
     prototype[baseShowWarningMethod] = prototype.showWarning;
   }
+  const baseHandleEvent = prototype[baseHandleEventMethod];
   const baseRenderSessionEntries = prototype[baseRenderSessionEntriesMethod];
   const baseShowError = prototype[baseShowErrorMethod];
   const baseShowWarning = prototype[baseShowWarningMethod];
+
+  prototype.handleEvent = async function compactHandleEvent(event) {
+    const result = await baseHandleEvent.call(this, event);
+    if (event.type === "message_start" && event.message?.role === "assistant") {
+      recordTranscriptAdjacency(this.chatContainer?.children);
+      if (isEnabled()) normalizeConsecutiveThinkingSpacing(this.chatContainer?.children);
+    }
+    return result;
+  };
 
   prototype.renderSessionEntries = function compactRenderSessionEntries(entries, options) {
     resetAssistantSections();

@@ -76,14 +76,19 @@ export async function patchHiddenThinkingLayout(
     }
   };
 
-  const normalizeConsecutiveThinkingSpacing = (children = []) => {
+  const recordTranscriptAdjacency = (children = []) => {
     let previousContent;
     for (const child of children) {
-      if (!(child instanceof Spacer)) {
-        child[previousTranscriptContent] = previousContent;
-        refreshThinkingSpacing(child);
-        previousContent = child;
-      }
+      if (isSpacerComponent(child)) continue;
+      child[previousTranscriptContent] = previousContent;
+      previousContent = child;
+    }
+  };
+
+  const normalizeConsecutiveThinkingSpacing = (children = []) => {
+    recordTranscriptAdjacency(children);
+    for (const child of children) {
+      if (!isSpacerComponent(child)) refreshThinkingSpacing(child);
     }
   };
 
@@ -132,6 +137,7 @@ export async function patchHiddenThinkingLayout(
       timeline,
       sectionController,
       resetAssistantSections,
+      recordTranscriptAdjacency,
       normalizeConsecutiveThinkingSpacing,
       isEnabled,
       transaction,
