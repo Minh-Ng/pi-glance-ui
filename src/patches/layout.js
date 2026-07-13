@@ -6,6 +6,7 @@ import {
   formatCompactThinkingText,
   formatThinkingText,
   renderErrorText,
+  sanitizeTerminalText,
   unwrapFormattedThinkingText,
   wrapThinkingLines,
 } from "../format.js";
@@ -40,6 +41,7 @@ export async function patchHiddenThinkingLayout(
   const errorStateByComponent = new WeakMap();
   const thinkingStateByComponent = new WeakMap();
   const compactThinkingRawText = Symbol("compact-thinking-raw-text");
+  const toolHasVisibleRows = Symbol.for("pi-glance-ui:tool-has-visible-rows");
   let assistantGeneration = 0;
   let latestCompactThinkingComponent;
   let nextErrorSectionId = 1;
@@ -91,6 +93,24 @@ export async function patchHiddenThinkingLayout(
 
   const isToolComponent = (component) =>
     component?.constructor?.name === "ToolExecutionComponent";
+  const isTransparentAssistant = (component) => {
+    const message = component?.[originalMessage] || component?.lastMessage;
+    return message?.role === "assistant" && visibleAssistantContent(component).length === 0;
+  };
+  const isVisiblyRenderedTool = (component, width) => {
+    if (typeof component?.[toolHasVisibleRows] === "boolean") {
+      return component[toolHasVisibleRows];
+    }
+    try {
+      const lines = component?.render?.(width);
+      return Array.isArray(lines) && lines.some(
+        (line) => sanitizeTerminalText(line).replaceAll("\u2800", " ").trim().length > 0,
+      );
+    } catch {
+      // Preserve an outer blank when visibility cannot be established.
+      return false;
+    }
+  };
 
   // Thinking spacing, the prose→action separator, and their idempotent add/remove
   // bookkeeping live in one cohesive unit; see TranscriptSpacer.
@@ -100,6 +120,8 @@ export async function patchHiddenThinkingLayout(
     endsWithThinkingComponent: endsWithThinkingAssistant,
     isTextBearingAssistant,
     isToolComponent,
+    isTransparentComponent: isTransparentAssistant,
+    isVisiblyRenderedTool,
     getTranscriptSpacingMode,
   });
 
@@ -357,7 +379,7 @@ export async function patchHiddenThinkingLayout(
           this,
           (child) => child?.[compactThinkingRawText] !== undefined,
         );
-        transcriptSpacer.refreshThinking(this);
+        transcriptSpacer.refreshThinking(this, width);
       }
       return baseRender.call(this, width);
     };

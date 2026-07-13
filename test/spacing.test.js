@@ -367,10 +367,22 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
       denseBlankRows: 1,
     },
     {
-      label: "tool execution",
-      create: () => ({ constructor: { name: "ToolExecutionComponent" } }),
+      label: "visible tool execution",
+      create: () => ({
+        constructor: { name: "ToolExecutionComponent" },
+        render: () => ["tool"],
+      }),
       blankRows: 1,
       denseBlankRows: 0,
+    },
+    {
+      label: "hidden tool execution",
+      create: () => ({
+        constructor: { name: "ToolExecutionComponent" },
+        render: () => [],
+      }),
+      blankRows: 1,
+      denseBlankRows: 1,
     },
     {
       label: "assistant text",
@@ -518,6 +530,76 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
   assert.equal(
     JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")).transcriptSpacing,
     "dense",
+  );
+
+  // Actual streaming order starts with an empty assistant message; Thinking
+  // arrives on a later update. This must still honor the user→cluster boundary.
+  const streamingChildren = [new UserMessageComponent("Live dense boundary")];
+  const streamingMode = {
+    isInitialized: true,
+    footer: { invalidate() {} },
+    hideThinkingBlock: true,
+    hiddenThinkingLabel: "Thinking hidden",
+    outputPad: 1,
+    pendingTools: new Map(),
+    getMarkdownThemeWithSettings: () => undefined,
+    chatContainer: {
+      children: streamingChildren,
+      addChild(component) { this.children.push(component); },
+    },
+    ui: { requestRender() {} },
+  };
+  await InteractiveMode.prototype.handleEvent.call(streamingMode, {
+    type: "message_start",
+    message: { role: "assistant", content: [], stopReason: "stop" },
+  });
+  await InteractiveMode.prototype.handleEvent.call(streamingMode, {
+    type: "message_update",
+    message: thinkingMessage,
+  });
+  assert.equal(
+    leadingBlankRows(streamingMode.streamingComponent, 80),
+    1,
+    "dense live user→Thinking stream keeps one outer blank",
+  );
+
+  // Persisted sessions can place tool-only assistant/components between the
+  // user and the first visible Thinking. Hidden tools must remain transparent.
+  const toolOnlyMessage = {
+    role: "assistant",
+    content: [{ type: "toolCall", id: "hidden-tool", name: "TaskList", arguments: {} }],
+    stopReason: "toolUse",
+  };
+  const toolOnlyAssistant = new AssistantMessageComponent(
+    toolOnlyMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const hiddenReplayTool = {
+    constructor: { name: "ToolExecutionComponent" },
+    render: () => [],
+  };
+  const afterHiddenTools = new AssistantMessageComponent(
+    thinkingMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const hiddenReplayChildren = [
+    new UserMessageComponent("Persisted dense boundary"),
+    toolOnlyAssistant,
+    hiddenReplayTool,
+    afterHiddenTools,
+  ];
+  InteractiveMode.prototype.renderSessionEntries.call({
+    chatContainer: { children: hiddenReplayChildren },
+    renderSessionItems() {},
+  }, []);
+  assert.equal(
+    leadingBlankRows(afterHiddenTools, 80),
+    1,
+    "dense replay user→hidden tools→Thinking keeps one outer blank",
   );
 
   await target.commands.get("glance-ui").handler(

@@ -10,6 +10,8 @@ const spacer = (mode = "separated") => new TranscriptSpacer({
   endsWithThinkingComponent: (c) => c?.endsThinking ?? c?.type === "thinking",
   isTextBearingAssistant: (c) => c?.endsProse ?? c?.type === "prose",
   isToolComponent: (c) => c?.constructor?.name === "ToolExecutionComponent",
+  isTransparentComponent: (c) => c?.transparent === true,
+  isVisiblyRenderedTool: (c, width) => c.render(width).some((line) => line.trim()),
   getTranscriptSpacingMode: typeof mode === "function" ? mode : () => mode,
 });
 
@@ -18,7 +20,10 @@ const thinking = (leadingBlank = true) => ({
   type: "thinking",
   contentContainer: { children: leadingBlank ? [new Spacer(1), {}] : [{}] },
 });
-const tool = () => ({ constructor: { name: "ToolExecutionComponent" } });
+const tool = (visible = true) => ({
+  constructor: { name: "ToolExecutionComponent" },
+  render: () => visible ? ["tool"] : [],
+});
 const user = () => ({ constructor: { name: "UserMessageComponent" } });
 
 const isSpacer = (c) => c instanceof Spacer;
@@ -116,7 +121,8 @@ test("all transcript→Thinking boundaries have the expected gap in both modes",
       create: () => ({ endsThinking: true, contentContainer: { children: [{}] } }),
       dense: 0,
     },
-    { label: "tool", create: tool, dense: 0 },
+    { label: "visible tool", create: tool, dense: 0 },
+    { label: "hidden tool", create: () => tool(false), dense: 1 },
     { label: "custom artifact", create: () => ({ type: "custom" }), dense: 1 },
     { label: "runtime/cache notice", create: () => ({ type: "runtime" }), dense: 1 },
   ];
@@ -125,7 +131,9 @@ test("all transcript→Thinking boundaries have the expected gap in both modes",
     for (const previousCase of previousCases) {
       const current = thinking(true);
       const previous = previousCase.create();
-      spacer(mode).normalize(previous ? [previous, current] : [current]);
+      const transcriptSpacer = spacer(mode);
+      transcriptSpacer.normalize(previous ? [previous, current] : [current]);
+      transcriptSpacer.refreshThinking(current, 80);
       const expected = mode === "dense" ? previousCase.dense : 1;
       assert.equal(
         Number(leading(current)),
@@ -138,6 +146,27 @@ test("all transcript→Thinking boundaries have the expected gap in both modes",
       );
     }
   }
+});
+
+test("dense mode looks through hidden tool-only continuations to the last visible boundary", () => {
+  const hiddenChain = () => [
+    { transparent: true },
+    tool(false),
+    { transparent: true },
+    tool(false),
+  ];
+
+  const afterUser = thinking(true);
+  const userSpacer = spacer("dense");
+  userSpacer.normalize([user(), ...hiddenChain(), afterUser]);
+  userSpacer.refreshThinking(afterUser, 80);
+  assert.equal(leading(afterUser), true, "hidden tools after a user do not erase the outer blank");
+
+  const afterThinking = thinking(true);
+  const thinkingSpacer = spacer("dense");
+  thinkingSpacer.normalize([thinking(true), ...hiddenChain(), afterThinking]);
+  thinkingSpacer.refreshThinking(afterThinking, 80);
+  assert.equal(leading(afterThinking), false, "hidden tools inside a Thinking cluster remain contiguous");
 });
 
 test("all assistant→tool boundaries add spacing only when final prose requires it", () => {
@@ -213,7 +242,7 @@ test("dense mode keeps one cluster boundary and removes internal Thinking/tool g
   const s = spacer(() => mode);
   const first = thinking(true);
   const second = thinking(true);
-  const hiddenTool = tool();
+  const hiddenTool = tool(false);
   const children = [user(), first, hiddenTool, second];
 
   s.normalize(children);

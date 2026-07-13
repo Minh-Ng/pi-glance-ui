@@ -31,6 +31,8 @@ export class TranscriptSpacer {
     endsWithThinkingComponent = isThinkingOnlyComponent,
     isTextBearingAssistant,
     isToolComponent,
+    isTransparentComponent = () => false,
+    isVisiblyRenderedTool = () => false,
     getTranscriptSpacingMode = () => "separated",
   }) {
     this.isThinkingOnlyComponent = isThinkingOnlyComponent;
@@ -38,6 +40,8 @@ export class TranscriptSpacer {
     this.endsWithThinkingComponent = endsWithThinkingComponent;
     this.isTextBearingAssistant = isTextBearingAssistant;
     this.isToolComponent = isToolComponent;
+    this.isTransparentComponent = isTransparentComponent;
+    this.isVisiblyRenderedTool = isVisiblyRenderedTool;
     this.getTranscriptSpacingMode = getTranscriptSpacingMode;
     this.suppressLeadingSpacer = Symbol.for("pi-glance-ui:suppress-leading-thinking-spacer");
     this.trailingSeparator = Symbol.for("pi-glance-ui:trailing-action-separator");
@@ -52,14 +56,33 @@ export class TranscriptSpacer {
   // Separated mode keeps one blank before every leading Thinking block. Dense
   // mode removes that blank only when a prior Thinking/tool continues the same
   // cluster, retaining one blank at the cluster's outer boundary.
-  refreshThinking(component) {
+  refreshThinking(component, width) {
     const children = component?.contentContainer?.children;
     if (!Array.isArray(children) || !this.startsWithThinkingComponent(component)) return;
-    const previous = component[this.previousContent];
-    const continuesDenseCluster = this.getTranscriptSpacingMode() === "dense"
-      && previous
-      && (this.isToolComponent(previous) || this.endsWithThinkingComponent(previous));
-    component[this.suppressLeadingSpacer] = Boolean(continuesDenseCluster);
+    let previous = component[this.previousContent];
+    let continuesDenseCluster = false;
+    if (this.getTranscriptSpacingMode() === "dense") {
+      while (previous) {
+        if (this.endsWithThinkingComponent(previous)) {
+          continuesDenseCluster = true;
+          break;
+        }
+        if (this.isToolComponent(previous)) {
+          if (width !== undefined && this.isVisiblyRenderedTool(previous, width)) {
+            continuesDenseCluster = true;
+            break;
+          }
+          previous = previous[this.previousContent];
+          continue;
+        }
+        if (this.isTransparentComponent(previous)) {
+          previous = previous[this.previousContent];
+          continue;
+        }
+        break;
+      }
+    }
+    component[this.suppressLeadingSpacer] = continuesDenseCluster;
 
     let leadingCount = 0;
     while (this.isSpacer(children[leadingCount])) leadingCount += 1;
