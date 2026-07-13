@@ -1,0 +1,12 @@
+# Development files
+.git/
+.github/
+.gitignore
+.pi/
+
+# Tests and local artifacts
+test/
+*.test.js
+*.log
+npm-debug.log*
+.DS_Store
