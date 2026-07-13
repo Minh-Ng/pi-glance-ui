@@ -4,6 +4,7 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+- Preserve transcript ordering during reconstruction so Thinking and action groups remain interleaved instead of appearing as two contiguous type blocks.
 - Keep Thinking sections available in tool-heavy transcripts by removing the obsolete 50-section FIFO cap; the windowed navigator now safely browses the complete active transcript section set.
 - Make setup and runtime status explicit that version-approved private patches are required for Thinking, artifacts, errors, custom tools, and the complete section viewer; document activation and Pi-upgrade behavior prominently.
 - Add an in-overlay detail viewer to Ctrl+Shift+O: wide terminals show section list and selected content side by side, narrow terminals prioritize selected content, Page Up/Page Down scrolls long blocks, and the UI labels its top-recent/bottom-older ordering.

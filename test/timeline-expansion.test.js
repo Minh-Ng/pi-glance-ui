@@ -32,6 +32,31 @@ function applyPiGlobalExpansion(timeline, component, expanded) {
   component.expanded = entry.group.expandedOverride ?? expanded;
 }
 
+test("rebuilt tools register alongside Thinking in transcript render order", () => {
+  const sections = new SectionController();
+  const timeline = new ToolTimeline(sections);
+
+  timeline.rebuildFromMessages(messages);
+  assert.deepEqual(sections.list(), [], "tool prepass must not preempt assistant sections");
+
+  sections.register({
+    id: "thinking:before-tool",
+    kind: "thinking",
+    label: "Thinking before tool",
+    isExpanded: () => false,
+    renderDetail: () => ["reasoning"],
+    toggle() {},
+  });
+  attach(timeline, { expanded: false });
+  timeline.finishTranscriptRebuild();
+
+  assert.deepEqual(
+    sections.list().map((section) => section.kind),
+    ["tools", "thinking"],
+    "reverse-chronological viewer order retains both interleaved kinds",
+  );
+});
+
 test("section expansion survives Pi global resets and transcript rebuilds", () => {
   const sections = new SectionController();
   const timeline = new ToolTimeline(sections);
