@@ -16,14 +16,22 @@ import { Spacer } from "@earendil-works/pi-tui";
 //
 // Component-type predicates are injected so this stays free of the assistant
 // message internals (which live in the layout patch).
+//
+// Bookkeeping symbols are registered (Symbol.for) rather than per-instance: a
+// /reload or session replacement creates a new extension generation with a
+// fresh TranscriptSpacer, but the transcript components it normalizes may have
+// been stamped by the previous generation. Private symbols made that state
+// invisible across the handoff, so the new generation pushed a second
+// separator blank before every replayed tool/action group (visible as double
+// spacing after resume) and could never remove stale ones.
 export class TranscriptSpacer {
   constructor({ isThinkingOnlyComponent, isTextBearingAssistant, isToolComponent }) {
     this.isThinkingOnlyComponent = isThinkingOnlyComponent;
     this.isTextBearingAssistant = isTextBearingAssistant;
     this.isToolComponent = isToolComponent;
-    this.suppressLeadingSpacer = Symbol("suppress-leading-thinking-spacer");
-    this.trailingSeparator = Symbol("trailing-action-separator");
-    this.previousContent = Symbol("previous-transcript-content");
+    this.suppressLeadingSpacer = Symbol.for("pi-glance-ui:suppress-leading-thinking-spacer");
+    this.trailingSeparator = Symbol.for("pi-glance-ui:trailing-action-separator");
+    this.previousContent = Symbol.for("pi-glance-ui:previous-transcript-content");
   }
 
   isSpacer(component) {
@@ -62,10 +70,12 @@ export class TranscriptSpacer {
     const hadSeparator = Boolean(component[this.trailingSeparator]);
     const shouldSeparate = this.isTextBearingAssistant(component) && this.isToolComponent(next);
     if (shouldSeparate) {
-      if (!(hadSeparator && this.isSpacer(last))) {
+      // Structural guard: never stack a second blank even if ownership state
+      // was stamped by a generation using the old private-symbol scheme.
+      if (!this.isSpacer(last)) {
         container.children.push(new Spacer(1));
-        component[this.trailingSeparator] = true;
       }
+      component[this.trailingSeparator] = true;
     } else if (hadSeparator) {
       if (this.isSpacer(last)) container.children.pop();
       component[this.trailingSeparator] = false;
