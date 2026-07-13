@@ -4,11 +4,18 @@ import { RecentToolSummary } from "../timeline.js";
 const ORIGINAL_TOOL_DEFINITION = Symbol.for("pi-compact-ui.original-tool-definition");
 const TOOL_HAS_VISIBLE_ROWS = Symbol.for("pi-glance-ui:tool-has-visible-rows");
 
-function rememberVisibleRows(component, lines) {
-  component[TOOL_HAS_VISIBLE_ROWS] = Array.isArray(lines) && lines.some(
+export function removeBlankOnlyToolRows(lines) {
+  if (!Array.isArray(lines)) return lines;
+  const hasVisibleRows = lines.some(
     (line) => sanitizeTerminalText(line).replaceAll("\u2800", " ").trim().length > 0,
   );
-  return lines;
+  return hasVisibleRows ? lines : [];
+}
+
+function rememberVisibleRows(component, lines) {
+  const visibleLines = removeBlankOnlyToolRows(lines);
+  component[TOOL_HAS_VISIBLE_ROWS] = visibleLines.length > 0;
+  return visibleLines;
 }
 
 export async function patchCompactToolSpacing(

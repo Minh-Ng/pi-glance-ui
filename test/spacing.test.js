@@ -6,6 +6,7 @@ import { test } from "node:test";
 import { stripVTControlCharacters } from "node:util";
 
 import glanceUi from "../src/index.js";
+import { removeBlankOnlyToolRows } from "../src/patches/tools.js";
 
 function harness() {
   const handlers = new Map();
@@ -50,6 +51,21 @@ function leadingBlankRows(component, width) {
   }
   return count;
 }
+
+function trailingBlankRows(component, width) {
+  let count = 0;
+  for (const line of component.render(width).toReversed()) {
+    if (stripVTControlCharacters(line).trim() !== "") break;
+    count += 1;
+  }
+  return count;
+}
+
+test("blank-only hidden tool renders cannot add transcript spacing", () => {
+  assert.deepEqual(removeBlankOnlyToolRows(["", "   ", "\u2800"]), []);
+  const visible = ["", "Tool output", ""];
+  assert.strictEqual(removeBlankOnlyToolRows(visible), visible);
+});
 
 test("a text-bearing message gains one blank line before a following action group, removed otherwise", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-sep-"));
@@ -607,7 +623,10 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
     {
       role: "assistant",
       content: [
-        { type: "text", text: "Assistant output before hidden actions" },
+        {
+          type: "text",
+          text: "Assistant output before hidden actions.\n\nA second prose paragraph before Thinking.",
+        },
         { type: "toolCall", id: "prose-tool", name: "TaskUpdate", arguments: {} },
       ],
       stopReason: "toolUse",
@@ -624,7 +643,10 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
   );
   const proseReplayChildren = [
     finalProseWithTool,
-    { constructor: { name: "ToolExecutionComponent" }, render: () => [] },
+    {
+      constructor: { name: "ToolExecutionComponent" },
+      render: () => removeBlankOnlyToolRows(["", "\u2800"]),
+    },
     toolOnlyAssistant,
     hiddenReplayTool,
     afterProseTools,
@@ -642,6 +664,17 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
     leadingBlankRows(afterProseTools, 80),
     0,
     "assistant prose→hidden tools→Thinking does not add a second blank",
+  );
+  const intermediateBlankRows = proseReplayChildren.slice(1, -1)
+    .flatMap((component) => component.render?.(80) ?? [])
+    .filter((line) => stripVTControlCharacters(line).trim() === "")
+    .length;
+  assert.equal(
+    trailingBlankRows(finalProseWithTool, 80)
+      + intermediateBlankRows
+      + leadingBlankRows(afterProseTools, 80),
+    1,
+    "multi-paragraph prose→hidden tools→Thinking has one total rendered blank",
   );
 
   const hiddenThinkingChildren = [new UserMessageComponent("Hidden Thinking boundary")];
