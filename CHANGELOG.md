@@ -2,6 +2,11 @@
 
 All notable changes to Pi Glance UI will be documented here.
 
+## 0.2.2
+
+- Fix private layout patches silently rendering native in a local dev checkout: anchor pi-coding-agent module resolution to the running CLI (`process.argv[1]`) so prototype patches target the instance Pi renders with, instead of a shadowing `node_modules` copy returned by `import.meta.resolve`.
+- Add regression coverage for CLI-anchored resolution and the `import.meta.resolve` fallback.
+
 ## 0.2.1
 
 - Avoid calling the optional `requestRender` method from real Pi command contexts.

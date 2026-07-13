@@ -1,3 +1,5 @@
+import { realpathSync } from "node:fs";
+import { pathToFileURL } from "node:url";
 import { Spacer, Text } from "@earendil-works/pi-tui";
 import { compactWhitespace, compatibilityError, errorTitle, formatThinkingText, renderErrorText, unwrapFormattedThinkingText } from "../format.js";
 import { patchCompactCustomMessages } from "./custom-messages.js";
@@ -6,6 +8,38 @@ import { patchCompactMarkdown } from "./markdown.js";
 import { patchCompactRuntimeErrors } from "./runtime-errors.js";
 import { patchCompactToolSpacing } from "./tools.js";
 import { PatchTransaction } from "./transaction.js";
+
+const PI_CODING_AGENT_SCOPES = [
+  "@earendil-works/pi-coding-agent",
+  "@mariozechner/pi-coding-agent",
+];
+
+// Prototype patches only take effect on the exact pi-coding-agent module
+// instance the running Pi renders with. A local dev checkout that ran
+// `npm install` carries a shadowing node_modules copy, and import.meta.resolve
+// (even under Pi's jiti loader) returns that shadow instead of the running
+// install — so patches would silently hit a dead module graph. Anchor to the
+// running CLI entry (process.argv[1], typically a bin symlink) when it lives
+// inside a pi-coding-agent install; otherwise fall back to import.meta.resolve
+// (tests and shadow-free distributed installs already resolve correctly).
+export function runningPiCodingAgentEntry() {
+  const main = process.argv?.[1];
+  if (typeof main === "string" && main.length > 0) {
+    let resolvedMain = main;
+    try {
+      resolvedMain = realpathSync(main);
+    } catch {
+      // Keep the raw argv path if it cannot be realpath-resolved.
+    }
+    const mainUrl = pathToFileURL(resolvedMain).href;
+    for (const scope of PI_CODING_AGENT_SCOPES) {
+      const needle = `/node_modules/${scope}/`;
+      const at = mainUrl.lastIndexOf(needle);
+      if (at !== -1) return `${mainUrl.slice(0, at + needle.length)}dist/index.js`;
+    }
+  }
+  return import.meta.resolve("@earendil-works/pi-coding-agent");
+}
 
 export async function patchHiddenThinkingLayout(
   timeline,
@@ -109,7 +143,7 @@ export async function patchHiddenThinkingLayout(
   };
 
   try {
-    const entryUrl = import.meta.resolve("@earendil-works/pi-coding-agent");
+    const entryUrl = runningPiCodingAgentEntry();
     await patchCompactMarkdown(entryUrl, isEnabled, transaction);
     transaction.checkpoint("markdown");
     await patchCompactUserMessages(entryUrl, isEnabled, transaction);
