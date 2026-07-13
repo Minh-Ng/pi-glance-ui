@@ -40,8 +40,9 @@ Compact rows retain useful arguments such as Bash commands, file paths, edit cou
 
 Use `/sections` or `Ctrl+Shift+O` to browse and locally override sections. The list runs from most recent at the top to older at the bottom. The selected block is rendered in a detail pane beside the list; narrow terminals devote the overlay to that selected detail.
 
-- Up/Down selects a section and refreshes its detail.
-- Page Up/Page Down scrolls long detail; Home/End jumps to its bounds.
+- Left/Right or Tab focuses the section list or detail pane.
+- Up/Down selects a section in the list or scrolls focused detail one line.
+- Page Up/Page Down scrolls detail by page; Home/End jumps to its bounds.
 - Enter or Space expands or collapses the corresponding transcript block.
 - Escape closes the navigator.
 

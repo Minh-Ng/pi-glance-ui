@@ -46,6 +46,7 @@ export class SectionNavigator {
     // the overlay's visible height. Falls back to a conservative default.
     this.viewportRows = viewportRows;
     this.selectedIndex = 0;
+    this.focusedPane = "sections";
     this.detailScrollOffset = 0;
     this.detailLineCount = 0;
     this.detailPageRows = 1;
@@ -56,32 +57,48 @@ export class SectionNavigator {
       this.onClose();
       return;
     }
+    if (matchesKey(data, "left")) {
+      this.focusedPane = "sections";
+      this.requestRender();
+      return;
+    }
+    if (matchesKey(data, "right")) {
+      this.focusedPane = "detail";
+      this.requestRender();
+      return;
+    }
+    if (matchesKey(data, "tab")) {
+      this.focusedPane = this.focusedPane === "sections" ? "detail" : "sections";
+      this.requestRender();
+      return;
+    }
     if (matchesKey(data, "up")) {
-      this.selectedIndex = Math.max(0, this.selectedIndex - 1);
-      this.detailScrollOffset = 0;
+      if (this.focusedPane === "detail") {
+        this.scrollDetail(-1);
+      } else {
+        this.selectedIndex = Math.max(0, this.selectedIndex - 1);
+        this.detailScrollOffset = 0;
+      }
       this.requestRender();
       return;
     }
     if (matchesKey(data, "down")) {
-      this.selectedIndex = Math.min(this.sections.length - 1, this.selectedIndex + 1);
-      this.detailScrollOffset = 0;
+      if (this.focusedPane === "detail") {
+        this.scrollDetail(1);
+      } else {
+        this.selectedIndex = Math.min(this.sections.length - 1, this.selectedIndex + 1);
+        this.detailScrollOffset = 0;
+      }
       this.requestRender();
       return;
     }
     if (matchesKey(data, "pageup")) {
-      this.detailScrollOffset = Math.max(
-        0,
-        this.detailScrollOffset - Math.max(1, this.detailPageRows - 1),
-      );
+      this.scrollDetail(-Math.max(1, this.detailPageRows - 1));
       this.requestRender();
       return;
     }
     if (matchesKey(data, "pagedown")) {
-      const maxOffset = Math.max(0, this.detailLineCount - this.detailPageRows);
-      this.detailScrollOffset = Math.min(
-        maxOffset,
-        this.detailScrollOffset + Math.max(1, this.detailPageRows - 1),
-      );
+      this.scrollDetail(Math.max(1, this.detailPageRows - 1));
       this.requestRender();
       return;
     }
@@ -99,6 +116,14 @@ export class SectionNavigator {
       this.sections[this.selectedIndex]?.toggle();
       this.requestRender();
     }
+  }
+
+  scrollDetail(delta) {
+    const maxOffset = Math.max(0, this.detailLineCount - this.detailPageRows);
+    this.detailScrollOffset = Math.min(
+      maxOffset,
+      Math.max(0, this.detailScrollOffset + delta),
+    );
   }
 
   renderSectionDetail(section, width) {
@@ -170,9 +195,12 @@ export class SectionNavigator {
     const overlayRows = Math.max(7, Math.floor(terminalRows * 0.8) - 2);
     const selected = this.sections[this.selectedIndex];
     const arrow = selected?.isExpanded() ? "▾" : "▸";
+    const actionGroups = this.sections.filter((section) => section.kind === "tools").length;
+    const thinkingSections = this.sections.filter((section) => section.kind === "thinking").length;
+    const sectionCounts = `${actionGroups} actions · ${thinkingSections} thinking`;
     const footer = this.theme.fg(
       "dim",
-      "↑↓ select · PgUp/PgDn detail · Enter toggle · Esc close",
+      "←/→ or Tab pane · ↑↓ select/scroll · PgUp/PgDn detail · Enter toggle · Esc close",
     );
 
     if (renderWidth < 100) {
@@ -182,8 +210,9 @@ export class SectionNavigator {
         detailRows,
       );
       const title = `${arrow} ${selected?.label ?? "Section"} (${this.selectedIndex + 1}/${this.sections.length})`;
+      const focusHint = this.focusedPane === "detail" ? "detail scroll" : "section select";
       return [
-        this.theme.fg("accent", this.theme.bold("Section detail · ↑ recent · ↓ older")),
+        this.theme.fg("accent", this.theme.bold(`Section detail · ${sectionCounts} · ↑ recent · ↓ older · ${focusHint}`)),
         this.theme.fg("accent", title),
         ...detail,
         footer,
@@ -200,11 +229,17 @@ export class SectionNavigator {
       this.renderSectionDetail(selected, detailWidth),
       bodyRows,
     );
-    const leftHeader = this.theme.fg(
-      "accent",
-      this.theme.bold("Sections · ↑ recent · ↓ older"),
+    const paneHeader = (label, active) => active
+      ? this.theme.fg("accent", this.theme.bold(`› ${label}`))
+      : this.theme.fg("dim", `  ${label}`);
+    const leftHeader = paneHeader(
+      `Sections · ${sectionCounts}`,
+      this.focusedPane === "sections",
     );
-    const rightHeader = this.theme.fg("accent", this.theme.bold(`Detail · ${selected?.label ?? "Section"}`));
+    const rightHeader = paneHeader(
+      `Detail · ${selected?.label ?? "Section"}`,
+      this.focusedPane === "detail",
+    );
     const fitColumn = (line, columnWidth) => {
       const fitted = truncateToWidth(line ?? "", columnWidth, "…");
       return fitted + " ".repeat(Math.max(0, columnWidth - visibleWidth(fitted)));

@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
+import { rebuildActionSections } from "../src/index.js";
+import { ToolTimeline } from "../src/timeline.js";
 import { SectionController, SectionNavigator } from "../src/ui/sections.js";
 
 const theme = { fg: (_c, t) => t, bold: (t) => t };
@@ -24,6 +26,59 @@ const navigator = (count, rows) => new SectionNavigator({
   onClose() {},
   requestRender() {},
   viewportRows: () => rows,
+});
+
+test("opening the navigator self-heals missing reload action sections", () => {
+  const sections = new SectionController();
+  const timeline = new ToolTimeline(sections);
+  sections.register({
+    id: "thinking:reload",
+    kind: "thinking",
+    label: "Thinking after reload",
+    isExpanded: () => false,
+    renderDetail: () => ["reasoning"],
+    toggle() {},
+  });
+  sections.register({
+    id: "tools:stale",
+    kind: "tools",
+    label: "Stale action",
+    isExpanded: () => false,
+    renderDetail: () => ["stale result"],
+    toggle() {},
+  });
+  const messages = [
+    { role: "user", content: "inspect" },
+    {
+      role: "assistant",
+      content: [{
+        type: "toolCall",
+        id: "reload-action",
+        name: "read",
+        arguments: { path: "README.md" },
+      }],
+    },
+    {
+      role: "toolResult",
+      toolCallId: "reload-action",
+      toolName: "read",
+      content: [{ type: "text", text: "restored on open" }],
+      isError: false,
+    },
+  ];
+
+  const recovery = rebuildActionSections({
+    timeline,
+    sectionController: sections,
+    sessionManager: { buildSessionContext: () => ({ messages }) },
+  });
+
+  assert.deepEqual(recovery, { rebuilt: true, toolCalls: 1, actionSections: 1 });
+  assert.ok(sections.list().some((section) => section.kind === "thinking"));
+  const actions = sections.list().filter((section) => section.kind === "tools");
+  assert.equal(actions.length, 1, "stale action sections are replaced, not accepted as sufficient");
+  assert.doesNotMatch(actions[0].label, /Stale/);
+  assert.match(actions[0].renderDetail(120).join("\n"), /restored on open/);
 });
 
 test("tool-heavy transcripts do not evict Thinking sections", () => {
@@ -103,7 +158,7 @@ test("Enter toggles the selected section's expansion arrow", () => {
 test("wide overlays render the selected section in a detail pane", () => {
   const nav = navigator(5, 30);
   let out = plain(nav.render(120));
-  assert.match(out, /Sections · ↑ recent · ↓ older/);
+  assert.match(out, /Sections · 5 actions · 0 thinking/);
   assert.match(out, /Detail · Section 0/);
   assert.match(out, /Detail for section 0/);
 
@@ -118,10 +173,48 @@ test("narrow overlays prioritize readable selected detail", () => {
   const nav = navigator(5, 30);
   nav.selectedIndex = 3;
   const out = plain(nav.render(80));
-  assert.match(out, /Section detail · ↑ recent · ↓ older/);
+  assert.match(out, /Section detail · 5 actions · 0 thinking · ↑ recent · ↓ older/);
   assert.match(out, /Section 3 \(4\/5\)/);
   assert.match(out, /Detail for section 3/);
   assert.doesNotMatch(out, /Section 2/);
+});
+
+test("arrow keys scroll the focused detail pane and preserve section selection", () => {
+  const sections = makeSections(2);
+  sections[0].renderDetail = () => Array.from({ length: 40 }, (_, i) => `Detail line ${i}`);
+  const nav = new SectionNavigator({
+    sections,
+    theme,
+    onClose() {},
+    requestRender() {},
+    viewportRows: () => 20,
+  });
+
+  assert.match(plain(nav.render(120)), /› Sections/, "section list starts focused");
+  nav.handleInput("\u001b[C");
+  assert.match(plain(nav.render(120)), /› Detail · Section 0/, "right focuses detail");
+
+  nav.handleInput("\u001b[B");
+  const scrolled = plain(nav.render(120));
+  assert.equal(nav.selectedIndex, 0, "down does not change selection while detail is focused");
+  assert.doesNotMatch(scrolled, /Detail line 0\b/);
+  assert.match(scrolled, /Detail line 1\b/);
+
+  nav.handleInput("\u001b[A");
+  assert.match(plain(nav.render(120)), /Detail line 0\b/, "up scrolls detail toward the start");
+
+  nav.handleInput("\u001b[D");
+  nav.handleInput("\u001b[B");
+  assert.equal(nav.selectedIndex, 1, "left restores list navigation");
+});
+
+test("Tab toggles between section and detail panes", () => {
+  const nav = navigator(2, 20);
+  nav.render(120);
+  nav.handleInput("\t");
+  assert.equal(nav.focusedPane, "detail");
+  nav.handleInput("\t");
+  assert.equal(nav.focusedPane, "sections");
 });
 
 test("PageUp and PageDown scroll long section detail", () => {

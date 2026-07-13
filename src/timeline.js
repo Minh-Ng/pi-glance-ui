@@ -1,7 +1,35 @@
 import { truncateToWidth } from "@earendil-works/pi-tui";
-import { activityPhaseForTool, activityToolPhaseLabel, groupLabel, groupLabelColor, renderBlockHeading, toolCategory, trimBlankLines } from "./format.js";
+import { activityPhaseForTool, activityToolPhaseLabel, groupLabel, groupLabelColor, renderBlockHeading, sanitizeTerminalText, toolCategory, trimBlankLines } from "./format.js";
 
 const MAX_COLLAPSED_ACTIONS = 10;
+
+function jsonLines(value) {
+  try {
+    const json = JSON.stringify(value, null, 2);
+    return json ? json.split("\n") : [sanitizeTerminalText(value)];
+  } catch {
+    return [sanitizeTerminalText(value)];
+  }
+}
+
+function fallbackResultLines(content) {
+  if (typeof content === "string") return sanitizeTerminalText(content).split("\n");
+  if (!Array.isArray(content)) return jsonLines(content);
+  return content.flatMap((item) => {
+    if (item?.type === "text") return sanitizeTerminalText(item.text).split("\n");
+    if (item?.type === "image") return [`[image · ${sanitizeTerminalText(item.mimeType ?? "unknown type")}]`];
+    return jsonLines(item);
+  });
+}
+
+function fallbackToolDetail(entry) {
+  const lines = [sanitizeTerminalText(entry.toolName ?? "tool"), "Arguments:", ...jsonLines(entry.args ?? {})];
+  if (entry.resultMessage) {
+    lines.push("", entry.resultMessage.isError ? "Result · failed:" : "Result:");
+    lines.push(...fallbackResultLines(entry.resultMessage.content));
+  }
+  return lines;
+}
 
 export class RecentToolSummary {
   constructor(timeline, entry) {
@@ -69,6 +97,11 @@ export class ToolTimeline {
         if (isActiveTurn) this.activeEntries = turnEntries;
         continue;
       }
+      if (message.role === "toolResult") {
+        const entry = this.entriesById.get(message.toolCallId);
+        if (entry) entry.resultMessage = message;
+        continue;
+      }
       if (message.role !== "assistant" || !Array.isArray(message.content)) continue;
       const isDetached = message.content.some(
         (item) => (item.type === "text" && item.text?.trim())
@@ -77,24 +110,30 @@ export class ToolTimeline {
       for (const item of message.content) {
         if (item.type !== "toolCall") continue;
         this.setDetached(item.id, isDetached);
-        this.registerForTurn(
+        const entry = this.registerForTurn(
           item.id,
           toolCategory(item.name, item.arguments),
           activityPhaseForTool(item.name, item.arguments),
           turnEntries,
           isActiveTurn,
         );
+        entry.toolName = item.name;
+        entry.args = item.arguments;
       }
     }
   }
 
   finishTranscriptRebuild() {
     this.isRebuildingTranscript = false;
-    const rebuiltGroupIds = new Set(
-      [...this.entriesById.values()]
-        .filter((entry) => entry.isTracked)
-        .map((entry) => entry.group.id),
-    );
+    // Pi may not render off-screen tool components during /reload. Ensure every
+    // rebuilt group is still represented; attached components replace this
+    // generic transcript-backed detail when available.
+    const rebuiltGroups = new Map();
+    for (const entry of this.entriesById.values()) {
+      if (entry.isTracked) rebuiltGroups.set(entry.group.id, entry.group);
+    }
+    for (const group of rebuiltGroups.values()) this.registerGroupSection(group);
+    const rebuiltGroupIds = new Set(rebuiltGroups.keys());
     for (const groupId of this.expansionStateByGroupId.keys()) {
       if (!rebuiltGroupIds.has(groupId)) this.expansionStateByGroupId.delete(groupId);
     }
@@ -216,8 +255,10 @@ export class ToolTimeline {
       renderDetail: (width) => {
         const lines = [];
         for (const entry of group.entries) {
-          if (typeof entry.renderDetail !== "function") continue;
-          const detail = trimBlankLines(entry.renderDetail(width));
+          const renderDetail = typeof entry.renderDetail === "function"
+            ? entry.renderDetail
+            : () => fallbackToolDetail(entry);
+          const detail = trimBlankLines(renderDetail(width));
           if (detail.length === 0) continue;
           if (lines.length > 0) lines.push("");
           lines.push(...detail);

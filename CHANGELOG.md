@@ -4,6 +4,11 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+## 0.2.7
+
+- Restore action sections in `Ctrl+Shift+O` after `/reload` by rebuilding them from the active session whenever the navigator opens; fallback detail retains tool arguments/results even when Pi never renders off-screen tool components, and visible action/Thinking counts make recovery observable.
+- Let Left/Right or Tab focus the section list or detail pane; Up/Down then selects sections or scrolls long detail one line.
+
 ## 0.2.6
 
 - Fix doubled blank lines in replayed transcripts after `/reload` or `/resume`: transcript-spacing bookkeeping now survives extension-generation handoffs (registered symbols plus a structural never-stack guard), so the new generation no longer inserts a second separator before replayed Thinking and action groups.

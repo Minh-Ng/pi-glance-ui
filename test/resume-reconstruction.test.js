@@ -157,6 +157,19 @@ test("resume replay stays compact before the replacement session_start", async (
     { type: "message", message: toolResult },
   ]);
 
+  const rebuiltSections = globalThis[sharedRuntimeSymbol].sectionController.list();
+  assert.ok(
+    rebuiltSections.some((section) => section.kind === "thinking"),
+    "reconstruction restores Thinking sections",
+  );
+  const rebuiltToolSection = rebuiltSections.find((section) => section.kind === "tools");
+  assert.ok(rebuiltToolSection, "reconstruction restores action sections before tool rows render");
+  assert.match(
+    plain(rebuiltToolSection.renderDetail(120)),
+    /historical file body/,
+    "the section navigator can render reconstructed action detail",
+  );
+
   assert.match(plain(assistantComponent.render(160)), /Thinking.*Historical resumed reasoning/);
   assert.match(plain(toolComponent.render(160)), /Plan · Explored/);
   assert.doesNotMatch(plain(toolComponent.render(160)), /historical file body/);
