@@ -89,13 +89,20 @@ export default function glanceUi(pi) {
   let workingDetailMode = persistedConfig.workingDetailMode
     ?? sharedRuntime.workingDetailMode
     ?? "auto";
+  // Session replacement loads the next extension generation before Pi replays
+  // the selected transcript, then emits session_start afterward. Keep already
+  // installed wrappers active through that replay only when the new generation
+  // reads the same persisted consent. Otherwise historical components are
+  // constructed natively and cannot be retrofitted once session_start arrives.
+  const inheritedPatchesActive = enabled
+    && sharedRuntime.patchesActive === true
+    && sharedRuntime.patchesVersion === patchesVersion;
   sharedRuntime.publicEnabled = enabled;
   sharedRuntime.patchesVersion = patchesVersion;
-  sharedRuntime.patchesActive = false;
+  sharedRuntime.patchesActive = inheritedPatchesActive;
   sharedRuntime.workingDetailMode = workingDetailMode;
   // Wrappers from builds predating explicit consent consult this legacy slot.
-  // Keep them dormant until the current generation installs successfully.
-  sharedRuntime.enabled = false;
+  sharedRuntime.enabled = inheritedPatchesActive;
   let layoutPatch;
   let patchInstallInProgress = false;
   let runningPiRuntime;
