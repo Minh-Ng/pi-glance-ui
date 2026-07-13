@@ -303,7 +303,7 @@ export default function glanceUi(pi) {
         }
         const saved = persistSettings(ctx);
         installTools(ctx.cwd || cwd || process.cwd(), ctx);
-        ctx.ui.requestRender();
+        ctx.ui.requestRender?.();
         const effect = enabled ? "compact tool rendering active" : "native Pi rendering active";
         ctx.ui.notify(
           `Glance UI enabled: ${requestedValue} · ${effect} · ${saved ? "saved" : "session only"}`,
@@ -325,7 +325,7 @@ export default function glanceUi(pi) {
           removePrivateSections();
           updatePatchPresentation(ctx);
           const saved = persistSettings(ctx);
-          ctx.ui.requestRender();
+          ctx.ui.requestRender?.();
           ctx.ui.notify(
             `Glance UI private patches: off · native layout active · ${saved ? "saved" : "session only"}`,
             saved ? "info" : "warning",
@@ -365,7 +365,7 @@ export default function glanceUi(pi) {
         syncLegacyPatchState();
         updatePatchPresentation(ctx);
         const saved = persistSettings(ctx);
-        ctx.ui.requestRender();
+        ctx.ui.requestRender?.();
         ctx.ui.notify(
           `Glance UI private patches: on for Pi ${VERSION} · ${saved ? "saved" : "session only"}`,
           saved ? "info" : "warning",

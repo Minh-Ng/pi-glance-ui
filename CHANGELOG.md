@@ -2,6 +2,11 @@
 
 All notable changes to Pi Glance UI will be documented here.
 
+## 0.2.1
+
+- Avoid calling the optional `requestRender` method from real Pi command contexts.
+- Cover enablement and patch consent commands with a command UI that omits `requestRender`.
+
 ## 0.2.0
 
 - Keep private layout patches dormant on fresh installs until explicit, version-scoped confirmation.

@@ -97,7 +97,7 @@ After `/glance-ui patches on` is confirmed for the running Pi version, Glance UI
 
 ## Compatibility
 
-Version 0.2.0 requires:
+Version 0.2.1 requires:
 
 - `@earendil-works/pi-coding-agent` 0.80.6
 - `@earendil-works/pi-tui` 0.80.6

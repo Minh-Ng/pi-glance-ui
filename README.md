@@ -27,7 +27,7 @@ Glance UI changes transcript presentation only. It does not change how tools exe
 ## Install
 
 ```bash
-pi install git:github.com/Minh-Ng/pi-glance-ui@v0.2.0
+pi install git:github.com/Minh-Ng/pi-glance-ui@v0.2.1
 ```
 
 Reload Pi after installation. Public compact tool rendering is enabled by default. Native transcript layout patches remain dormant unless you run `/glance-ui patches on` and confirm them for the installed Pi version; no Pi files are modified.
