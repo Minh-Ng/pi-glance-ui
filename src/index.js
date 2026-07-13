@@ -6,12 +6,12 @@ import {
   createLsToolDefinition,
   createReadToolDefinition,
   createWriteToolDefinition,
+  VERSION,
 } from "@earendil-works/pi-coding-agent";
 
 import { loadGlanceUiConfig, saveGlanceUiConfig } from "./config.js";
 import { activityPhaseForTool, compactWhitespace, compatibilityError, toolCategory } from "./format.js";
-import { patchHiddenThinkingLayout } from "./patches/layout.js";
-import { compactDefinition } from "./patches/tools.js";
+import { compactDefinition } from "./tools.js";
 import { ToolTimeline } from "./timeline.js";
 import { SectionController, SectionNavigator } from "./ui/sections.js";
 
@@ -27,6 +27,7 @@ const TOOL_FACTORIES = [
   createLsToolDefinition,
 ];
 const SHARED_RUNTIME_STATE = Symbol.for("pi-compact-ui.shared-runtime-state");
+const SUPPORTED_PATCH_VERSIONS = new Set(["0.80.6"]);
 const WORKING_DETAIL_MODES = new Set(["auto", "compact", "expanded", "hidden"]);
 
 export default function glanceUi(pi) {
@@ -50,27 +51,56 @@ export default function glanceUi(pi) {
   delete sharedRuntime.briefEnabled;
   const { sectionController, timeline } = sharedRuntime;
   const persistedConfig = loadGlanceUiConfig();
+  const legacyEnabled = typeof sharedRuntime.enabled === "boolean"
+    ? sharedRuntime.enabled
+    : undefined;
   let enabled = persistedConfig.enabled
-    ?? sharedRuntime.enabled
+    ?? sharedRuntime.publicEnabled
+    ?? legacyEnabled
     ?? true;
+  // Consent must come from the persisted config on every extension generation.
+  // Falling back to process-global state would resurrect consent after a user
+  // deletes patchesVersion and reloads Pi.
+  let patchesVersion = persistedConfig.patchesVersion;
   let workingDetailMode = persistedConfig.workingDetailMode
     ?? sharedRuntime.workingDetailMode
     ?? "auto";
-  sharedRuntime.enabled = enabled;
+  sharedRuntime.publicEnabled = enabled;
+  sharedRuntime.patchesVersion = patchesVersion;
+  sharedRuntime.patchesActive = false;
   sharedRuntime.workingDetailMode = workingDetailMode;
+  // Wrappers from builds predating explicit consent consult this legacy slot.
+  // Keep them dormant until the current generation installs successfully.
+  sharedRuntime.enabled = false;
   let layoutPatch;
+  let patchInstallInProgress = false;
 
-  const isEnabled = () => sharedRuntime.enabled;
-  const currentSettings = () => ({ enabled, workingDetailMode });
+  const isEnabled = () => sharedRuntime.publicEnabled;
+  const isPatchEnabled = () => isEnabled()
+    && (sharedRuntime.patchesActive || patchInstallInProgress);
+  const syncLegacyPatchState = () => {
+    sharedRuntime.enabled = isPatchEnabled();
+  };
+  const currentSettings = () => ({
+    enabled,
+    ...(patchesVersion ? { patchesVersion } : {}),
+    workingDetailMode,
+  });
   const workingDetailEffects = {
     auto: "only the bottom-most running tool stays compact",
     compact: "running tools stay compact",
     expanded: "running tools follow Ctrl+O",
     hidden: "running tools appear when they finish",
   };
+  const patchStatus = () => patchesVersion === VERSION && sharedRuntime.patchesActive
+    ? `on for Pi ${VERSION}`
+    : patchesVersion && patchesVersion !== VERSION
+      ? `off (approval was for Pi ${patchesVersion})`
+      : "off";
   const settingsSummary = () => [
     "Glance UI settings",
-    `enabled: ${enabled ? "on" : "off"} (on|off) — ${enabled ? "compact transcript rendering is active" : "native Pi rendering is active"}`,
+    `enabled: ${enabled ? "on" : "off"} (on|off) — ${enabled ? "compact tool rendering is active" : "native Pi rendering is active"}`,
+    `patches: ${patchStatus()} (on|off) — optional native transcript layout patches`,
     `working-detail: ${workingDetailMode} (auto|compact|expanded|hidden) — ${workingDetailEffects[workingDetailMode]}`,
     "Change: /glance-ui settings <name> <value>",
     "Sections: /sections or Ctrl+Shift+O",
@@ -80,6 +110,7 @@ export default function glanceUi(pi) {
     try {
       const config = currentSettings();
       saveGlanceUiConfig(config);
+      if (!patchesVersion) delete persistedConfig.patchesVersion;
       Object.assign(persistedConfig, config);
       return true;
     } catch (error) {
@@ -89,6 +120,10 @@ export default function glanceUi(pi) {
       );
       return false;
     }
+  };
+
+  const removePrivateSections = () => {
+    sectionController.removeKinds(["assistantError", "custom", "runtimeNotice", "thinking"]);
   };
 
   const showSections = async (ctx) => {
@@ -113,20 +148,66 @@ export default function glanceUi(pi) {
     });
   };
 
-  const install = (nextCwd, ctx) => {
+  const updatePatchPresentation = (ctx) => {
+    ctx?.ui.setHiddenThinkingLabel(
+      isPatchEnabled() ? "Thinking hidden · Ctrl+T to show" : undefined,
+    );
+  };
+
+  const installTools = (nextCwd, ctx) => {
     cwd = nextCwd;
     for (const factory of TOOL_FACTORIES) {
       const original = factory(nextCwd);
       pi.registerTool(isEnabled() ? compactDefinition(original, timeline, isEnabled) : original);
     }
-    ctx?.ui.setHiddenThinkingLabel(
-      enabled ? "Thinking hidden · Ctrl+T to show" : undefined,
+    updatePatchPresentation(ctx);
+  };
+
+  const ensureLayoutPatch = async () => {
+    if (!SUPPORTED_PATCH_VERSIONS.has(VERSION)) {
+      return { ok: false, error: `Pi ${VERSION} is not a tested patch target` };
+    }
+    if (!layoutPatch) {
+      patchInstallInProgress = true;
+      syncLegacyPatchState();
+      layoutPatch = (async () => {
+        const { patchHiddenThinkingLayout } = await import("./patches/layout.js");
+        return patchHiddenThinkingLayout(
+          timeline,
+          sectionController,
+          isPatchEnabled,
+          () => workingDetailMode,
+        );
+      })();
+    }
+    let compatibility;
+    try {
+      compatibility = await layoutPatch;
+      sharedRuntime.patchesActive = compatibility.ok;
+      if (!compatibility.ok) layoutPatch = undefined;
+      return compatibility;
+    } catch (error) {
+      layoutPatch = undefined;
+      sharedRuntime.patchesActive = false;
+      return { ok: false, error: compatibilityError(error) };
+    } finally {
+      patchInstallInProgress = false;
+      syncLegacyPatchState();
+    }
+  };
+
+  const notifyPatchFailure = (ctx, compatibility) => {
+    const reason = compactWhitespace(compatibility.error).slice(0, 120);
+    ctx.ui.notify(
+      `Glance UI: layout extras unavailable (${reason}). Compact tools remain active.`,
+      "warning",
     );
   };
 
   pi.on("session_start", async (_event, ctx) => {
     if (
       persistedConfig.enabled !== enabled
+      || persistedConfig.patchesVersion !== patchesVersion
       || persistedConfig.workingDetailMode !== workingDetailMode
     ) {
       persistSettings(ctx);
@@ -138,21 +219,14 @@ export default function glanceUi(pi) {
     // Keep the legacy Symbol namespace so a hot reload recognizes existing patches.
     ctx.ui[Symbol.for("pi-compact-ui.widget-tracker")]?.listeners?.clear();
 
-    // User-message compatibility probing needs Pi's theme, which is not initialized
-    // while extensions are first imported. Defer all private layout patches until
-    // session_start so a probe failure cannot prevent the tool-spacing patch.
-    layoutPatch = patchHiddenThinkingLayout(
-      timeline,
-      sectionController,
-      isEnabled,
-      () => workingDetailMode,
-    );
-    const compatibility = await layoutPatch;
-    install(ctx.cwd, ctx);
-    if (!compatibility.ok) {
-      const reason = compactWhitespace(compatibility.error).slice(0, 120);
+    installTools(ctx.cwd, ctx);
+    if (enabled && patchesVersion === VERSION) {
+      const compatibility = await ensureLayoutPatch();
+      updatePatchPresentation(ctx);
+      if (!compatibility.ok) notifyPatchFailure(ctx, compatibility);
+    } else if (patchesVersion && patchesVersion !== VERSION) {
       ctx.ui.notify(
-        `Glance UI: layout extras unavailable (${reason}). Compact tools remain active.`,
+        `Glance UI: private patches remain off on Pi ${VERSION}; approval was for Pi ${patchesVersion}.`,
         "warning",
       );
     }
@@ -194,6 +268,7 @@ export default function glanceUi(pi) {
       const requested = raw.trim().toLowerCase();
       let tokens = requested ? requested.split(/\s+/) : [];
 
+      if (tokens[0] === "install-patch") tokens = ["patches", "on"];
       if (["settings", "config"].includes(tokens[0])) tokens = tokens.slice(1);
       if (
         tokens.length === 0
@@ -211,7 +286,12 @@ export default function glanceUi(pi) {
           return;
         }
         enabled = requestedValue === "on";
-        sharedRuntime.enabled = enabled;
+        sharedRuntime.publicEnabled = enabled;
+        if (enabled && patchesVersion === VERSION) {
+          const compatibility = await ensureLayoutPatch();
+          if (!compatibility.ok) notifyPatchFailure(ctx, compatibility);
+        }
+        syncLegacyPatchState();
         if (!enabled) {
           sectionController.removeKinds([
             "assistantError",
@@ -222,11 +302,72 @@ export default function glanceUi(pi) {
           ]);
         }
         const saved = persistSettings(ctx);
-        install(ctx.cwd || cwd || process.cwd(), ctx);
+        installTools(ctx.cwd || cwd || process.cwd(), ctx);
         ctx.ui.requestRender();
-        const effect = enabled ? "compact rendering active" : "native Pi rendering active";
+        const effect = enabled ? "compact tool rendering active" : "native Pi rendering active";
         ctx.ui.notify(
           `Glance UI enabled: ${requestedValue} · ${effect} · ${saved ? "saved" : "session only"}`,
+          saved ? "info" : "warning",
+        );
+        return;
+      }
+
+      if (setting === "patches") {
+        if (tokens.length !== 2 || !["on", "off"].includes(value)) {
+          ctx.ui.notify("Usage: /glance-ui patches on|off", "warning");
+          return;
+        }
+        if (value === "off") {
+          patchesVersion = undefined;
+          sharedRuntime.patchesVersion = undefined;
+          sharedRuntime.patchesActive = false;
+          syncLegacyPatchState();
+          removePrivateSections();
+          updatePatchPresentation(ctx);
+          const saved = persistSettings(ctx);
+          ctx.ui.requestRender();
+          ctx.ui.notify(
+            `Glance UI private patches: off · native layout active · ${saved ? "saved" : "session only"}`,
+            saved ? "info" : "warning",
+          );
+          return;
+        }
+        if (!enabled) {
+          ctx.ui.notify("Enable Glance UI before enabling private patches.", "warning");
+          return;
+        }
+        if (!SUPPORTED_PATCH_VERSIONS.has(VERSION)) {
+          ctx.ui.notify(
+            `Glance UI private patches are not available for untested Pi ${VERSION}.`,
+            "warning",
+          );
+          return;
+        }
+        if (patchesVersion === VERSION && sharedRuntime.patchesActive) {
+          ctx.ui.notify(`Glance UI private patches are already on for Pi ${VERSION}.`, "info");
+          return;
+        }
+        const confirmed = await ctx.ui.confirm(
+          "Enable private layout patches?",
+          `This applies tested in-memory prototype patches to Pi ${VERSION}. No installed files are changed. Approval expires when Pi's version changes.`,
+        );
+        if (!confirmed) {
+          ctx.ui.notify("Glance UI private patches remain off.", "info");
+          return;
+        }
+        const compatibility = await ensureLayoutPatch();
+        if (!compatibility.ok) {
+          notifyPatchFailure(ctx, compatibility);
+          return;
+        }
+        patchesVersion = VERSION;
+        sharedRuntime.patchesVersion = VERSION;
+        syncLegacyPatchState();
+        updatePatchPresentation(ctx);
+        const saved = persistSettings(ctx);
+        ctx.ui.requestRender();
+        ctx.ui.notify(
+          `Glance UI private patches: on for Pi ${VERSION} · ${saved ? "saved" : "session only"}`,
           saved ? "info" : "warning",
         );
         return;

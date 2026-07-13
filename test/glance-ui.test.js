@@ -101,20 +101,30 @@ test("glance-ui config persists valid settings and tolerates malformed data", ()
   const directory = mkdtempSync(join(tmpdir(), "glance-ui-config-"));
   const path = join(directory, "nested", "glance-ui.json");
   try {
-    saveGlanceUiConfig({ enabled: false, workingDetailMode: "hidden" }, path);
+    saveGlanceUiConfig({
+      enabled: false,
+      patchesVersion: "0.80.6",
+      workingDetailMode: "hidden",
+    }, path);
     assert.deepEqual(loadGlanceUiConfig(path), {
       enabled: false,
+      patchesVersion: "0.80.6",
       workingDetailMode: "hidden",
     });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), {
       enabled: false,
+      patchesVersion: "0.80.6",
       workingDetailMode: "hidden",
     });
 
     writeFileSync(path, "not json");
     assert.deepEqual(loadGlanceUiConfig(path), {});
 
-    writeFileSync(path, JSON.stringify({ enabled: "no", workingDetailMode: "invalid" }));
+    writeFileSync(path, JSON.stringify({
+      enabled: "no",
+      patchesVersion: " ",
+      workingDetailMode: "invalid",
+    }));
     assert.deepEqual(loadGlanceUiConfig(path), {});
   } finally {
     rmSync(directory, { recursive: true, force: true });
@@ -130,6 +140,9 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     else process.env.PI_GLANCE_UI_CONFIG = previousConfigPath;
     rmSync(configDirectory, { recursive: true, force: true });
   });
+  writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
+    patchesVersion: "0.80.6",
+  }));
   const harness = createExtensionHarness();
   glanceUi(harness.pi);
 
@@ -156,13 +169,15 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   ]);
   assert.deepEqual(JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")), {
     enabled: true,
+    patchesVersion: "0.80.6",
     workingDetailMode: "auto",
   });
   await harness.registeredCommands.get("glance-ui").handler("settings", harness.ctx);
   assert.deepEqual(harness.notifications.at(-1), {
     message: [
       "Glance UI settings",
-      "enabled: on (on|off) — compact transcript rendering is active",
+      "enabled: on (on|off) — compact tool rendering is active",
+      "patches: on for Pi 0.80.6 (on|off) — optional native transcript layout patches",
       "working-detail: auto (auto|compact|expanded|hidden) — only the bottom-most running tool stays compact",
       "Change: /glance-ui settings <name> <value>",
       "Sections: /sections or Ctrl+Shift+O",
@@ -1346,6 +1361,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   });
   assert.deepEqual(JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")), {
     enabled: false,
+    patchesVersion: "0.80.6",
     workingDetailMode: "compact",
   });
 
@@ -1358,6 +1374,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   assert.equal(reloadHarness.getHiddenThinkingLabel(), "Thinking hidden · Ctrl+T to show");
   assert.deepEqual(JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")), {
     enabled: true,
+    patchesVersion: "0.80.6",
     workingDetailMode: "compact",
   });
   await emitAsync(reloadHarness, "before_agent_start");
@@ -1462,6 +1479,9 @@ test("startup render benchmark", {
     rmSync(configDirectory, { recursive: true, force: true });
   });
 
+  writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
+    patchesVersion: "0.80.6",
+  }));
   const harness = createExtensionHarness();
   glanceUi(harness.pi);
   const codingAgentEntryUrl = import.meta.resolve("@earendil-works/pi-coding-agent");

@@ -14,6 +14,9 @@ export function loadGlanceUiConfig(path = glanceUiConfigPath()) {
     if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
     return {
       ...(typeof parsed.enabled === "boolean" ? { enabled: parsed.enabled } : {}),
+      ...(typeof parsed.patchesVersion === "string" && parsed.patchesVersion.trim()
+        ? { patchesVersion: parsed.patchesVersion.trim() }
+        : {}),
       ...(WORKING_DETAIL_MODES.has(parsed.workingDetailMode)
         ? { workingDetailMode: parsed.workingDetailMode }
         : {}),

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -120,6 +120,9 @@ test("a fresh Pi home installs and starts Glance UI successfully", async (t) => 
     "Glance UI's compatibility patch failed during fresh startup",
   );
   assert.equal(stderr, "", `Pi emitted startup errors:\n${stderr}`);
+  const config = JSON.parse(readFileSync(env.PI_GLANCE_UI_CONFIG, "utf8"));
+  assert.equal(config.enabled, true);
+  assert.equal(config.patchesVersion, undefined, "fresh installs must not imply patch consent");
 
   child.kill();
 });
