@@ -5,7 +5,7 @@ All notable changes to Pi Glance UI will be documented here.
 ## 0.2.3
 
 - `/glance-ui` now opens an interactive, live-updating settings panel (enabled / patches / working-detail) navigable with the keyboard; values update in place as they change. `/glance-ui settings` still prints the text summary, and the panel falls back to text when custom overlays are unavailable (RPC/print modes). Preserves the version-gated confirmation before enabling private layout patches.
-- Add one blank line between a text-bearing assistant message and an immediately following grouped action ("Act · Ran") summary, matching native Pi's separation that the compact grouping otherwise removes. The separator is idempotent and self-removing when that adjacency no longer holds.
+- Add one blank line between a text-bearing assistant message and an immediately following grouped action ("Act · Ran") summary, matching native Pi's separation that the compact grouping otherwise removes. The separator is applied the moment the tool row streams in (no flicker), is idempotent, and is self-removing when that adjacency no longer holds.
 - Fix wrapped Thinking lines breaking out to the left margin: re-wrap thinking prose to the live render width with a hanging indent so continuation lines stay aligned under their branch connector or the `Thinking:` label. Covers both multi-section and single-section (inline) thinking.
 - Add spacing-contract, settings-panel, and hanging-indent test coverage (`wrapThinkingLines` and transcript boundary matrix).
 

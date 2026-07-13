@@ -196,6 +196,80 @@ test("only thinking-only blocks collapse leading spacing; text-bearing messages 
   );
 });
 
+test("live: prose→action separator lands in the same frame the tool row streams in", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-flicker-"));
+  const previousConfig = process.env.PI_GLANCE_UI_CONFIG;
+  process.env.PI_GLANCE_UI_CONFIG = join(directory, "glance-ui.json");
+  t.after(() => {
+    if (previousConfig === undefined) delete process.env.PI_GLANCE_UI_CONFIG;
+    else process.env.PI_GLANCE_UI_CONFIG = previousConfig;
+    rmSync(directory, { recursive: true, force: true });
+  });
+  writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
+    enabled: true,
+    patchesVersion: "0.80.6",
+    workingDetailMode: "auto",
+  }));
+
+  const target = harness();
+  glanceUi(target.pi);
+  const codingAgentEntry = import.meta.resolve("@earendil-works/pi-coding-agent");
+  const [{ initTheme }, { AssistantMessageComponent }, { InteractiveMode }] = await Promise.all([
+    import(new URL("./modes/interactive/theme/theme.js", codingAgentEntry).href),
+    import(new URL("./modes/interactive/components/assistant-message.js", codingAgentEntry).href),
+    import(new URL("./modes/interactive/interactive-mode.js", codingAgentEntry).href),
+  ]);
+  initTheme("dark");
+  await emit(target, "session_start");
+
+  const isSpacer = (component) => component?.constructor?.name === "Spacer";
+  const hasTrailingSpacer = (component) => {
+    const children = component.contentContainer?.children ?? [];
+    return children.length > 0 && isSpacer(children[children.length - 1]);
+  };
+
+  const prose = new AssistantMessageComponent(
+    { role: "assistant", content: [{ type: "text", text: "Let me verify." }], stopReason: "stop" },
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  // Simulates the ToolExecutionComponent Pi appends mid-stream.
+  const toolRow = { constructor: { name: "ToolExecutionComponent" }, updateArgs() {}, setExpanded() {} };
+  const children = [prose, toolRow];
+  const liveMode = {
+    isInitialized: true,
+    footer: { invalidate() {} },
+    streamingComponent: prose,
+    streamingMessage: undefined,
+    pendingTools: new Map([["t1", toolRow]]),
+    chatContainer: { children, addChild(component) { this.children.push(component); } },
+    ui: { requestRender() {} },
+  };
+
+  // Before the toolCall streams in there is no separator (nothing to separate).
+  assert.equal(hasTrailingSpacer(prose), false, "no separator before the tool row exists");
+
+  // The frame the toolCall arrives is a `message_update`, not a `message_start`.
+  // The fix must normalize here so the blank line is present immediately.
+  await InteractiveMode.prototype.handleEvent.call(liveMode, {
+    type: "message_update",
+    message: {
+      role: "assistant",
+      content: [
+        { type: "text", text: "Let me verify." },
+        { type: "toolCall", id: "t1", name: "bash", arguments: {} },
+      ],
+    },
+  });
+
+  assert.equal(
+    hasTrailingSpacer(prose),
+    true,
+    "separator must appear on the same message_update frame the tool row streams in",
+  );
+});
+
 test("Thinking spacing follows transcript boundaries live and after reconstruction", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-spacing-"));
   const previousConfig = process.env.PI_GLANCE_UI_CONFIG;
