@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { wrapThinkingLines } from "../src/format.js";
+import {
+  formatCompactThinkingText,
+  MAX_COMPACT_THINKING_CHARS,
+  wrapThinkingLines,
+} from "../src/format.js";
 
 function continuationsAreIndented(output) {
   const lines = output.split("\n");
@@ -53,4 +57,15 @@ test("width is clamped so tiny widths never throw", () => {
   const source = "○ ▸ Thinking\n  └ some longer content that must still wrap without error";
   assert.doesNotThrow(() => wrapThinkingLines(source, 1));
   assert.ok(continuationsAreIndented(wrapThinkingLines(source, 1)));
+});
+
+test("compact streaming thinking formats only a bounded recent tail", () => {
+  const discarded = `discarded-start-marker ${"old reasoning ".repeat(MAX_COMPACT_THINKING_CHARS)}`;
+  const latest = "latest conclusion remains visible";
+  const formatted = formatCompactThinkingText(`${discarded}${latest}`);
+
+  assert.ok(!formatted.includes("discarded-start-marker"));
+  assert.ok(formatted.includes("…"));
+  assert.ok(formatted.includes(latest));
+  assert.ok(formatted.length <= MAX_COMPACT_THINKING_CHARS + 20);
 });

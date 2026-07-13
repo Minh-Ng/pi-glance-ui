@@ -1,6 +1,13 @@
 import { stripVTControlCharacters } from "node:util";
 
 const CHECK_COMMAND_RE = /(?:^|\s|\/)(?:npm\s+(?:test|run\s+(?:check|lint|typecheck|build))|pnpm\s+(?:test|run\s+(?:check|lint|typecheck|build))|yarn\s+(?:test|run\s+(?:check|lint|typecheck|build))|pytest|vitest|ruff|ty\s+check|tsc|node\s+--check|cargo\s+(?:test|check)|go\s+test)(?:\s|$)/i;
+const UNSAFE_TERMINAL_CONTROL_RE = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
+export const MAX_COMPACT_THINKING_CHARS = 2_000;
+
+export function sanitizeTerminalText(value) {
+  return stripVTControlCharacters(String(value ?? ""))
+    .replace(UNSAFE_TERMINAL_CONTROL_RE, "");
+}
 
 function isCheckTool(name, args = {}) {
   const normalized = String(name || "").toLowerCase();
@@ -117,11 +124,13 @@ export function errorTitle(message) {
 }
 
 export function artifactContent(message) {
-  if (typeof message.content === "string") return message.content;
-  return message.content
+  const content = typeof message.content === "string"
+    ? message.content
+    : message.content
     .filter((item) => item.type === "text")
     .map((item) => item.text)
     .join("\n");
+  return sanitizeTerminalText(content);
 }
 
 export function artifactSummary(message) {
@@ -146,7 +155,7 @@ export function artifactSummary(message) {
 }
 
 export function artifactLabel(message) {
-  return String(message.customType || "Artifact")
+  return sanitizeTerminalText(message.customType || "Artifact")
     .replace(/^web-search-content-ready$/, "Web content ready")
     .split(/[-_]+/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
@@ -178,7 +187,7 @@ export function toolAction(name) {
     read: "Read",
     write: "Write",
   };
-  return labels[name] || String(name || "Tool")
+  return labels[name] || sanitizeTerminalText(name || "Tool")
     .split(/[_-]+/)
     .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
     .join(" ");
@@ -207,7 +216,7 @@ export function summarize(name, args, cwd) {
     case "grep":
       return `${quote(args.pattern)} in ${shortPath(args.path || ".", cwd)}`;
     case "find":
-      return `${args.pattern || "*"} in ${shortPath(args.path || ".", cwd)}`;
+      return `${sanitizeTerminalText(args.pattern || "*")} in ${shortPath(args.path || ".", cwd)}`;
     case "ls":
       return shortPath(args.path || ".", cwd);
     default:
@@ -235,6 +244,14 @@ export function formatThinkingText(value, isExpanded) {
     return `  ${connector} ${section}`;
   });
   return [`${thinkingGlyph} ${disclosure} Thinking`, ...branches].join("  \n");
+}
+
+export function formatCompactThinkingText(value) {
+  const source = String(value ?? "");
+  const bounded = source.length > MAX_COMPACT_THINKING_CHARS
+    ? `…${source.slice(-(MAX_COMPACT_THINKING_CHARS - 1))}`
+    : source;
+  return formatThinkingText(bounded, false);
 }
 
 // Re-wrap already-formatted thinking text to a target width with a hanging
@@ -284,7 +301,7 @@ function wrapThinkingLine(line, maxWidth) {
 }
 
 export function unwrapFormattedThinkingText(value) {
-  let text = String(value).trim();
+  let text = sanitizeTerminalText(value).trim();
   for (;;) {
     const inlineMatch = text.match(/^(?:[●○] )?[▾▸] Thinking:\s*([^]*)$/);
     if (inlineMatch) {
@@ -305,16 +322,20 @@ export function unwrapFormattedThinkingText(value) {
 }
 
 export function compactWhitespace(value) {
-  return String(value).replace(/\s+/g, " ").trim();
+  return sanitizeTerminalText(value).replace(/\s+/g, " ").trim();
 }
 
 function shortPath(value, cwd) {
   const path = String(value || ".");
-  if (cwd && path.startsWith(`${cwd}/`)) return path.slice(cwd.length + 1);
+  if (cwd && path.startsWith(`${cwd}/`)) {
+    return sanitizeTerminalText(path.slice(cwd.length + 1));
+  }
   const home = process.env.HOME;
   if (home && path === home) return "~";
-  if (home && path.startsWith(`${home}/`)) return `~/${path.slice(home.length + 1)}`;
-  return path;
+  if (home && path.startsWith(`${home}/`)) {
+    return sanitizeTerminalText(`~/${path.slice(home.length + 1)}`);
+  }
+  return sanitizeTerminalText(path);
 }
 
 function rangeSuffix(args) {

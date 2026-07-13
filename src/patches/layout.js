@@ -1,7 +1,15 @@
-import { realpathSync } from "node:fs";
-import { pathToFileURL } from "node:url";
 import { Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
-import { compactWhitespace, compatibilityError, errorTitle, formatThinkingText, renderErrorText, unwrapFormattedThinkingText, wrapThinkingLines } from "../format.js";
+import {
+  compactWhitespace,
+  compatibilityError,
+  errorTitle,
+  formatCompactThinkingText,
+  formatThinkingText,
+  renderErrorText,
+  unwrapFormattedThinkingText,
+  wrapThinkingLines,
+} from "../format.js";
+import { runningPiCodingAgentEntry } from "../pi-runtime.js";
 import { patchCompactCustomMessages } from "./custom-messages.js";
 import { patchCompactFooter, patchCompactUserMessages } from "./chrome.js";
 import { patchCompactMarkdown } from "./markdown.js";
@@ -10,44 +18,17 @@ import { patchCompactToolSpacing } from "./tools.js";
 import { PatchTransaction } from "./transaction.js";
 import { TranscriptSpacer } from "../ui/transcript-spacing.js";
 
-const PI_CODING_AGENT_SCOPES = [
-  "@earendil-works/pi-coding-agent",
-  "@mariozechner/pi-coding-agent",
-];
-
-// Prototype patches only take effect on the exact pi-coding-agent module
-// instance the running Pi renders with. A local dev checkout that ran
-// `npm install` carries a shadowing node_modules copy, and import.meta.resolve
-// (even under Pi's jiti loader) returns that shadow instead of the running
-// install — so patches would silently hit a dead module graph. Anchor to the
-// running CLI entry (process.argv[1], typically a bin symlink) when it lives
-// inside a pi-coding-agent install; otherwise fall back to import.meta.resolve
-// (tests and shadow-free distributed installs already resolve correctly).
-export function runningPiCodingAgentEntry() {
-  const main = process.argv?.[1];
-  if (typeof main === "string" && main.length > 0) {
-    let resolvedMain = main;
-    try {
-      resolvedMain = realpathSync(main);
-    } catch {
-      // Keep the raw argv path if it cannot be realpath-resolved.
-    }
-    const mainUrl = pathToFileURL(resolvedMain).href;
-    for (const scope of PI_CODING_AGENT_SCOPES) {
-      const needle = `/node_modules/${scope}/`;
-      const at = mainUrl.lastIndexOf(needle);
-      if (at !== -1) return `${mainUrl.slice(0, at + needle.length)}dist/index.js`;
-    }
-  }
-  return import.meta.resolve("@earendil-works/pi-coding-agent");
-}
+export { runningPiCodingAgentEntry };
 
 export async function patchHiddenThinkingLayout(
   timeline,
   sectionController,
   isEnabled,
   getWorkingDetailMode,
-  { transaction = new PatchTransaction() } = {},
+  {
+    transaction = new PatchTransaction(),
+    codingAgentEntryUrl = runningPiCodingAgentEntry(),
+  } = {},
 ) {
   const baseUpdateMethod = Symbol.for("pi-compact-ui.base-update-content");
   const baseSetHideThinkingMethod = Symbol.for("pi-compact-ui.base-set-hide-thinking");
@@ -123,7 +104,7 @@ export async function patchHiddenThinkingLayout(
   };
 
   try {
-    const entryUrl = runningPiCodingAgentEntry();
+    const entryUrl = codingAgentEntryUrl;
     await patchCompactMarkdown(entryUrl, isEnabled, transaction);
     transaction.checkpoint("markdown");
     await patchCompactUserMessages(entryUrl, isEnabled, transaction);
@@ -188,25 +169,35 @@ export async function patchHiddenThinkingLayout(
     const setHideThinkingBlock = prototype[baseSetHideThinkingMethod];
     const renderThinking = (component, source, mode) => {
       const thinkingState = getThinkingState(component);
-      const isExpanded = mode === "all";
       const compactThinkingByIndex = new Map();
+      const thinkingIndices = [];
       for (let index = 0; index < source.content.length; index += 1) {
         const item = source.content[index];
         if (item.type !== "thinking") continue;
-        const thinking = formatThinkingText(item.thinking, isExpanded);
-        if (thinking) compactThinkingByIndex.set(index, thinking);
+        if (String(item.thinking ?? "").length > 0) thinkingIndices.push(index);
       }
-      const latestThinkingIndex = Array.from(compactThinkingByIndex.keys()).at(-1);
-      const sectionSummary = source.content
-        .filter((item) => item.type === "thinking")
-        .map((item) => compactWhitespace(unwrapFormattedThinkingText(item.thinking)))
-        .filter(Boolean)
-        .at(-1)
-        ?.slice(0, 60);
+      const latestThinkingIndex = thinkingIndices.at(-1);
+      if (mode === "all") {
+        for (const index of thinkingIndices) {
+          const thinking = formatThinkingText(source.content[index].thinking, true);
+          if (thinking) compactThinkingByIndex.set(index, thinking);
+        }
+      } else if (mode === "latest" && latestThinkingIndex !== undefined) {
+        const thinking = formatCompactThinkingText(
+          source.content[latestThinkingIndex].thinking,
+        );
+        if (thinking) compactThinkingByIndex.set(latestThinkingIndex, thinking);
+      }
+      const latestThinking = latestThinkingIndex === undefined
+        ? ""
+        : String(source.content[latestThinkingIndex].thinking ?? "");
+      const sectionSummary = compactWhitespace(
+        unwrapFormattedThinkingText(latestThinking.slice(0, 240)),
+      ).slice(0, 60);
       sectionController.register({
         id: thinkingState.id,
         kind: "thinking",
-        label: `Thinking · ${compactThinkingByIndex.size} step${compactThinkingByIndex.size === 1 ? "" : "s"}${sectionSummary ? ` · ${sectionSummary}` : ""}`,
+        label: `Thinking · ${thinkingIndices.length} step${thinkingIndices.length === 1 ? "" : "s"}${sectionSummary ? ` · ${sectionSummary}` : ""}`,
         isExpanded: () => thinkingState.expansionOverride ?? !component.hideThinkingBlock,
         renderDetail: (width) => source.content
           .filter((item) => item.type === "thinking")
@@ -229,8 +220,6 @@ export async function patchHiddenThinkingLayout(
           if (item.type !== "thinking") return [item];
           const thinking = compactThinkingByIndex.get(index);
           if (!thinking) return [];
-          if (mode === "none") return [];
-          if (mode === "latest" && index !== latestThinkingIndex) return [];
           return [{ ...item, thinking }];
         }),
       };
@@ -383,7 +372,7 @@ export async function patchHiddenThinkingLayout(
       }
 
       const hasThinking = source.content.some(
-        (item) => item.type === "thinking" && formatThinkingText(item.thinking, false),
+        (item) => item.type === "thinking" && String(item.thinking ?? "").length > 0,
       );
       if (!hasThinking) return renderThinking(this, source, "none");
 

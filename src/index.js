@@ -1,16 +1,6 @@
-import {
-  createBashToolDefinition,
-  createEditToolDefinition,
-  createFindToolDefinition,
-  createGrepToolDefinition,
-  createLsToolDefinition,
-  createReadToolDefinition,
-  createWriteToolDefinition,
-  VERSION,
-} from "@earendil-works/pi-coding-agent";
-
 import { loadGlanceUiConfig, saveGlanceUiConfig } from "./config.js";
 import { activityPhaseForTool, compactWhitespace, compatibilityError, toolCategory } from "./format.js";
+import { loadRunningPiRuntime } from "./pi-runtime.js";
 import { compactDefinition } from "./tools.js";
 import { ToolTimeline } from "./timeline.js";
 import { SectionController, SectionNavigator } from "./ui/sections.js";
@@ -18,36 +8,69 @@ import { SettingsPanel } from "./ui/settings-panel.js";
 
 export { loadGlanceUiConfig, saveGlanceUiConfig } from "./config.js";
 
-const TOOL_FACTORIES = [
-  createReadToolDefinition,
-  createBashToolDefinition,
-  createEditToolDefinition,
-  createWriteToolDefinition,
-  createGrepToolDefinition,
-  createFindToolDefinition,
-  createLsToolDefinition,
-];
 const SHARED_RUNTIME_STATE = Symbol.for("pi-compact-ui.shared-runtime-state");
 const SUPPORTED_PATCH_VERSIONS = new Set(["0.80.6"]);
 const WORKING_DETAIL_MODES = new Set(["auto", "compact", "expanded", "hidden"]);
+
+function requiresFreshContainer(current, fallback) {
+  if (fallback instanceof Map) return !(current instanceof Map);
+  if (fallback instanceof Set) return !(current instanceof Set);
+  if (Array.isArray(fallback)) return !Array.isArray(current);
+  return false;
+}
+
+function migrateInstance(instance, fallback, prototype) {
+  if (!instance || typeof instance !== "object") return fallback;
+  try {
+    Object.setPrototypeOf(instance, prototype);
+  } catch {
+    return fallback;
+  }
+  for (const property of Reflect.ownKeys(fallback)) {
+    const current = instance[property];
+    if (
+      Object.hasOwn(instance, property)
+      && !requiresFreshContainer(current, fallback[property])
+    ) continue;
+    Object.defineProperty(
+      instance,
+      property,
+      Object.getOwnPropertyDescriptor(fallback, property),
+    );
+  }
+  return instance;
+}
+
+function migrateSharedRuntime(candidate) {
+  const sharedRuntime = candidate
+    && typeof candidate === "object"
+    && !(candidate instanceof WeakMap)
+    ? candidate
+    : {};
+  const nextSectionController = new SectionController();
+  const sectionController = migrateInstance(
+    sharedRuntime.sectionController,
+    nextSectionController,
+    SectionController.prototype,
+  );
+  const timeline = migrateInstance(
+    sharedRuntime.timeline,
+    new ToolTimeline(sectionController),
+    ToolTimeline.prototype,
+  );
+  timeline.sectionController = sectionController;
+  sharedRuntime.sectionController = sectionController;
+  sharedRuntime.timeline = timeline;
+  return sharedRuntime;
+}
 
 export default function glanceUi(pi) {
   let cwd;
   // Pi owns one interactive transcript per process and rebuilds it before newly
   // reloaded extension handlers run. Preserve that transcript's runtime through
   // the handoff so existing tool components never fall back to full output.
-  let sharedRuntime = globalThis[SHARED_RUNTIME_STATE];
-  if (!sharedRuntime || sharedRuntime instanceof WeakMap) {
-    const nextSectionController = new SectionController();
-    sharedRuntime = {
-      sectionController: nextSectionController,
-      timeline: new ToolTimeline(nextSectionController),
-    };
-    globalThis[SHARED_RUNTIME_STATE] = sharedRuntime;
-  }
-  Object.setPrototypeOf(sharedRuntime.sectionController, SectionController.prototype);
-  Object.setPrototypeOf(sharedRuntime.timeline, ToolTimeline.prototype);
-  sharedRuntime.timeline.sectionController = sharedRuntime.sectionController;
+  const sharedRuntime = migrateSharedRuntime(globalThis[SHARED_RUNTIME_STATE]);
+  globalThis[SHARED_RUNTIME_STATE] = sharedRuntime;
   delete sharedRuntime.activity;
   delete sharedRuntime.briefEnabled;
   const { sectionController, timeline } = sharedRuntime;
@@ -75,6 +98,19 @@ export default function glanceUi(pi) {
   sharedRuntime.enabled = false;
   let layoutPatch;
   let patchInstallInProgress = false;
+  let runningPiRuntime;
+  let runningPiRuntimePromise;
+
+  const ensureRunningPiRuntime = async () => {
+    if (!runningPiRuntimePromise) {
+      runningPiRuntimePromise = loadRunningPiRuntime().then((runtime) => {
+        runningPiRuntime = runtime;
+        return runtime;
+      });
+    }
+    return runningPiRuntimePromise;
+  };
+  const runningPiVersion = () => runningPiRuntime?.version;
 
   const isEnabled = () => sharedRuntime.publicEnabled;
   const isPatchEnabled = () => isEnabled()
@@ -93,9 +129,9 @@ export default function glanceUi(pi) {
     expanded: "running tools follow Ctrl+O",
     hidden: "running tools appear when they finish",
   };
-  const patchStatus = () => patchesVersion === VERSION && sharedRuntime.patchesActive
-    ? `on for Pi ${VERSION}`
-    : patchesVersion && patchesVersion !== VERSION
+  const patchStatus = () => patchesVersion === runningPiVersion() && sharedRuntime.patchesActive
+    ? `on for Pi ${runningPiVersion()}`
+    : patchesVersion && patchesVersion !== runningPiVersion()
       ? `off (approval was for Pi ${patchesVersion})`
       : "off";
   const settingsSummary = () => [
@@ -158,7 +194,8 @@ export default function glanceUi(pi) {
 
   const installTools = (nextCwd, ctx) => {
     cwd = nextCwd;
-    for (const factory of TOOL_FACTORIES) {
+    if (!runningPiRuntime) throw new Error("running Pi runtime is not initialized");
+    for (const factory of runningPiRuntime.toolFactories) {
       const original = factory(nextCwd);
       pi.registerTool(isEnabled() ? compactDefinition(original, timeline, isEnabled) : original);
     }
@@ -166,8 +203,9 @@ export default function glanceUi(pi) {
   };
 
   const ensureLayoutPatch = async () => {
-    if (!SUPPORTED_PATCH_VERSIONS.has(VERSION)) {
-      return { ok: false, error: `Pi ${VERSION} is not a tested patch target` };
+    const runtime = await ensureRunningPiRuntime();
+    if (!SUPPORTED_PATCH_VERSIONS.has(runtime.version)) {
+      return { ok: false, error: `Pi ${runtime.version} is not a tested patch target` };
     }
     if (!layoutPatch) {
       patchInstallInProgress = true;
@@ -179,6 +217,7 @@ export default function glanceUi(pi) {
           sectionController,
           isPatchEnabled,
           () => workingDetailMode,
+          { codingAgentEntryUrl: runtime.entryUrl },
         );
       })();
     }
@@ -207,6 +246,7 @@ export default function glanceUi(pi) {
   };
 
   pi.on("session_start", async (_event, ctx) => {
+    const runtime = await ensureRunningPiRuntime();
     if (
       persistedConfig.enabled !== enabled
       || persistedConfig.patchesVersion !== patchesVersion
@@ -222,13 +262,13 @@ export default function glanceUi(pi) {
     ctx.ui[Symbol.for("pi-compact-ui.widget-tracker")]?.listeners?.clear();
 
     installTools(ctx.cwd, ctx);
-    if (enabled && patchesVersion === VERSION) {
+    if (enabled && patchesVersion === runtime.version) {
       const compatibility = await ensureLayoutPatch();
       updatePatchPresentation(ctx);
       if (!compatibility.ok) notifyPatchFailure(ctx, compatibility);
-    } else if (patchesVersion && patchesVersion !== VERSION) {
+    } else if (patchesVersion && patchesVersion !== runtime.version) {
       ctx.ui.notify(
-        `Glance UI: private patches remain off on Pi ${VERSION}; approval was for Pi ${patchesVersion}.`,
+        `Glance UI: private patches remain off on Pi ${runtime.version}; approval was for Pi ${patchesVersion}.`,
         "warning",
       );
     }
@@ -265,9 +305,10 @@ export default function glanceUi(pi) {
   });
 
   const applyEnabled = async (nextEnabled, ctx) => {
+    const runtime = await ensureRunningPiRuntime();
     enabled = nextEnabled;
     sharedRuntime.publicEnabled = enabled;
-    if (enabled && patchesVersion === VERSION) {
+    if (enabled && patchesVersion === runtime.version) {
       const compatibility = await ensureLayoutPatch();
       if (!compatibility.ok) notifyPatchFailure(ctx, compatibility);
     }
@@ -311,20 +352,21 @@ export default function glanceUi(pi) {
       ctx.ui.notify("Enable Glance UI before enabling private patches.", "warning");
       return;
     }
-    if (!SUPPORTED_PATCH_VERSIONS.has(VERSION)) {
+    const runtime = await ensureRunningPiRuntime();
+    if (!SUPPORTED_PATCH_VERSIONS.has(runtime.version)) {
       ctx.ui.notify(
-        `Glance UI private patches are not available for untested Pi ${VERSION}.`,
+        `Glance UI private patches are not available for untested Pi ${runtime.version}.`,
         "warning",
       );
       return;
     }
-    if (patchesVersion === VERSION && sharedRuntime.patchesActive) {
-      ctx.ui.notify(`Glance UI private patches are already on for Pi ${VERSION}.`, "info");
+    if (patchesVersion === runtime.version && sharedRuntime.patchesActive) {
+      ctx.ui.notify(`Glance UI private patches are already on for Pi ${runtime.version}.`, "info");
       return;
     }
     const confirmed = await ctx.ui.confirm(
       "Enable private layout patches?",
-      `This applies tested in-memory prototype patches to Pi ${VERSION}. No installed files are changed. Approval expires when Pi's version changes.`,
+      `This applies tested in-memory prototype patches to Pi ${runtime.version}. No installed files are changed. Approval expires when Pi's version changes.`,
     );
     if (!confirmed) {
       ctx.ui.notify("Glance UI private patches remain off.", "info");
@@ -335,14 +377,14 @@ export default function glanceUi(pi) {
       notifyPatchFailure(ctx, compatibility);
       return;
     }
-    patchesVersion = VERSION;
-    sharedRuntime.patchesVersion = VERSION;
+    patchesVersion = runtime.version;
+    sharedRuntime.patchesVersion = runtime.version;
     syncLegacyPatchState();
     updatePatchPresentation(ctx);
     const saved = persistSettings(ctx);
     ctx.ui.requestRender?.();
     ctx.ui.notify(
-      `Glance UI private patches: on for Pi ${VERSION} · ${saved ? "saved" : "session only"}`,
+      `Glance UI private patches: on for Pi ${runtime.version} · ${saved ? "saved" : "session only"}`,
       saved ? "info" : "warning",
     );
   };
@@ -375,7 +417,7 @@ export default function glanceUi(pi) {
     {
       key: "patches",
       label: "patches",
-      value: patchesVersion === VERSION && sharedRuntime.patchesActive ? "on" : "off",
+      value: patchesVersion === runningPiVersion() && sharedRuntime.patchesActive ? "on" : "off",
       values: ["on", "off"],
       effect: `required for the full viewer and transcript presentation (${patchStatus()})`,
     },

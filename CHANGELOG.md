@@ -4,6 +4,11 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+- Load version checks and built-in tool factories from the running Pi installation so consent and private patches always target the same module graph.
+- Strip terminal control sequences from compact summaries, errors, paths, Thinking prose, and custom artifacts before rendering them.
+- Migrate constructor-owned state when an extension hot reload retains shared runtime objects, preventing new fields from being absent on older instances.
+- Bound compact Thinking formatting during streaming while preserving complete content in expanded detail, avoiding work that grows quadratically with the response.
+- Point the README at an existing release tag and validate install refs, package metadata, release tags, and performance benchmarks in CI.
 - Preserve transcript ordering during reconstruction so Thinking and action groups remain interleaved instead of appearing as two contiguous type blocks.
 - Keep Thinking sections available in tool-heavy transcripts by removing the obsolete 50-section FIFO cap; the windowed navigator now safely browses the complete active transcript section set.
 - Make setup and runtime status explicit that version-approved private patches are required for Thinking, artifacts, errors, custom tools, and the complete section viewer; document activation and Pi-upgrade behavior prominently.
