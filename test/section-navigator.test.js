@@ -13,6 +13,7 @@ const makeSections = (count) => Array.from({ length: count }, (_, i) => {
     kind: "tools",
     label: `Section ${i}`,
     isExpanded: () => expanded,
+    renderDetail: () => [`Detail for section ${i}`, `Result ${i}`],
     toggle: () => { expanded = !expanded; },
   };
 });
@@ -71,4 +72,52 @@ test("Enter toggles the selected section's expansion arrow", () => {
   assert.match(plain(nav.render(120)), /> ▸ Section 2/);
   nav.handleInput("\r");
   assert.match(plain(nav.render(120)), /> ▾ Section 2/, "arrow flips to expanded");
+});
+
+test("wide overlays render the selected section in a detail pane", () => {
+  const nav = navigator(5, 30);
+  let out = plain(nav.render(120));
+  assert.match(out, /Detail · Section 0/);
+  assert.match(out, /Detail for section 0/);
+
+  nav.handleInput("\u001b[B");
+  out = plain(nav.render(120));
+  assert.match(out, /Detail · Section 1/);
+  assert.match(out, /Detail for section 1/);
+  assert.doesNotMatch(out, /Detail for section 0/);
+});
+
+test("narrow overlays prioritize readable selected detail", () => {
+  const nav = navigator(5, 30);
+  nav.selectedIndex = 3;
+  const out = plain(nav.render(80));
+  assert.match(out, /Section detail/);
+  assert.match(out, /Section 3 \(4\/5\)/);
+  assert.match(out, /Detail for section 3/);
+  assert.doesNotMatch(out, /Section 2/);
+});
+
+test("PageUp and PageDown scroll long section detail", () => {
+  const sections = makeSections(1);
+  sections[0].renderDetail = () => Array.from({ length: 40 }, (_, i) => `Detail line ${i}`);
+  const nav = new SectionNavigator({
+    sections,
+    theme,
+    onClose() {},
+    requestRender() {},
+    viewportRows: () => 20,
+  });
+
+  const firstPage = plain(nav.render(120));
+  assert.match(firstPage, /Detail line 0/);
+  assert.match(firstPage, /lines below/);
+
+  nav.handleInput("\u001b[6~");
+  const secondPage = plain(nav.render(120));
+  assert.doesNotMatch(secondPage, /Detail line 0\b/);
+  assert.match(secondPage, /lines above/);
+  assert.match(secondPage, /Detail line \d+/);
+
+  nav.handleInput("\u001b[5~");
+  assert.match(plain(nav.render(120)), /Detail line 0/);
 });

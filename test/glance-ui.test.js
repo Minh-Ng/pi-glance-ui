@@ -400,6 +400,24 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     }
     assert.ok(taskDetail.includes(taskTool.result));
   }
+  await harness.registeredCommands.get("sections").handler("", harness.ctx);
+  const taskViewer = harness.getCustomComponent();
+  assert.deepEqual(harness.getCustomOptions().overlayOptions, {
+    width: "90%",
+    maxHeight: "80%",
+    anchor: "center",
+    margin: 1,
+  });
+  const taskCreateSectionIndex = taskViewer.sections.findIndex(
+    (section) => section.id === "tools:task-create-detail",
+  );
+  assert.notEqual(taskCreateSectionIndex, -1);
+  taskViewer.selectedIndex = taskCreateSectionIndex;
+  const taskCreateViewer = plain(taskViewer.render(180));
+  assert.match(taskCreateViewer, /Detail · .*Changed/);
+  assert.match(taskCreateViewer, /Preserve complete task details/);
+  assert.match(taskCreateViewer, /Show every TaskCreate field when tool output is expanded\./);
+  assert.match(taskCreateViewer, /Task #42 created successfully/);
 
   await emitAsync(harness, "before_agent_start");
   const categorizedTools = [

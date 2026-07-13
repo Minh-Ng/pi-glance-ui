@@ -34,10 +34,11 @@ Compact rows retain useful arguments such as Bash commands, file paths, edit cou
 
 `Ctrl+O` always controls completed tool detail. With private patches on, it also controls recorded Thinking and custom artifacts, while `Ctrl+T` controls Thinking visibility.
 
-Use `/sections` or `Ctrl+Shift+O` for a local override:
+Use `/sections` or `Ctrl+Shift+O` to browse and locally override sections. The selected block is rendered in a detail pane beside the list; narrow terminals devote the overlay to that selected detail.
 
-- Up/Down selects a section.
-- Enter or Space expands or collapses it.
+- Up/Down selects a section and refreshes its detail.
+- Page Up/Page Down scrolls long detail; Home/End jumps to its bounds.
+- Enter or Space expands or collapses the corresponding transcript block.
 - Escape closes the navigator.
 
 A later global toggle clears the relevant local override. Expanded built-in tools use Pi's native renderer. Terminal-image rows retain their native reserved height.

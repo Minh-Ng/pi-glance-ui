@@ -1,4 +1,4 @@
-import { matchesKey, Text, truncateToWidth } from "@earendil-works/pi-tui";
+import { matchesKey, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { errorTitle, renderErrorText, trimBlankLines } from "../format.js";
 
 const MAX_NAVIGABLE_SECTIONS = 50;
@@ -44,10 +44,13 @@ export class SectionNavigator {
     this.theme = theme;
     this.onClose = onClose;
     this.requestRender = requestRender;
-    // Optional () => terminal rows, used to window the list to the overlay's
-    // visible height. Falls back to a conservative default when unavailable.
+    // Optional () => terminal rows, used to fit both list and detail panes to
+    // the overlay's visible height. Falls back to a conservative default.
     this.viewportRows = viewportRows;
     this.selectedIndex = 0;
+    this.detailScrollOffset = 0;
+    this.detailLineCount = 0;
+    this.detailPageRows = 1;
   }
 
   handleInput(data) {
@@ -57,11 +60,40 @@ export class SectionNavigator {
     }
     if (matchesKey(data, "up")) {
       this.selectedIndex = Math.max(0, this.selectedIndex - 1);
+      this.detailScrollOffset = 0;
       this.requestRender();
       return;
     }
     if (matchesKey(data, "down")) {
       this.selectedIndex = Math.min(this.sections.length - 1, this.selectedIndex + 1);
+      this.detailScrollOffset = 0;
+      this.requestRender();
+      return;
+    }
+    if (matchesKey(data, "pageup")) {
+      this.detailScrollOffset = Math.max(
+        0,
+        this.detailScrollOffset - Math.max(1, this.detailPageRows - 1),
+      );
+      this.requestRender();
+      return;
+    }
+    if (matchesKey(data, "pagedown")) {
+      const maxOffset = Math.max(0, this.detailLineCount - this.detailPageRows);
+      this.detailScrollOffset = Math.min(
+        maxOffset,
+        this.detailScrollOffset + Math.max(1, this.detailPageRows - 1),
+      );
+      this.requestRender();
+      return;
+    }
+    if (matchesKey(data, "home")) {
+      this.detailScrollOffset = 0;
+      this.requestRender();
+      return;
+    }
+    if (matchesKey(data, "end")) {
+      this.detailScrollOffset = Math.max(0, this.detailLineCount - this.detailPageRows);
       this.requestRender();
       return;
     }
@@ -71,18 +103,47 @@ export class SectionNavigator {
     }
   }
 
-  render(width) {
-    const truncate = (line) => truncateToWidth(line, Math.max(1, width), "…");
+  renderSectionDetail(section, width) {
+    if (typeof section?.renderDetail !== "function") {
+      return [this.theme.fg("dim", "No detail preview is available for this section.")];
+    }
+    try {
+      const lines = section.renderDetail(Math.max(1, width));
+      if (!Array.isArray(lines) || lines.length === 0) {
+        return [this.theme.fg("dim", "This section has no visible detail.")];
+      }
+      return lines.map((line) => String(line));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return [this.theme.fg("error", `Could not render section detail: ${message}`)];
+    }
+  }
+
+  windowDetail(lines, capacity) {
+    const scrolling = lines.length > capacity;
+    const pageRows = scrolling ? Math.max(1, capacity - 2) : capacity;
+    const maxOffset = Math.max(0, lines.length - pageRows);
+    this.detailScrollOffset = Math.min(this.detailScrollOffset, maxOffset);
+    this.detailLineCount = lines.length;
+    this.detailPageRows = pageRows;
+    const end = Math.min(lines.length, this.detailScrollOffset + pageRows);
+    const visible = lines.slice(this.detailScrollOffset, end);
+    if (!scrolling) return visible;
+    return [
+      this.detailScrollOffset > 0
+        ? this.theme.fg("dim", `↑ ${this.detailScrollOffset} lines above`)
+        : "",
+      ...visible,
+      end < lines.length
+        ? this.theme.fg("dim", `↓ ${lines.length - end} lines below`)
+        : "",
+    ];
+  }
+
+  windowSections(capacity) {
     const total = this.sections.length;
-    // render(width) is not given a height, so derive the overlay's usable rows
-    // from the terminal height (the overlay opens at maxHeight 70%). Without a
-    // window the list overflows the clipped overlay, so the selection — and the
-    // visible effect of toggling it — scrolls off the bottom of the page.
-    const terminalRows = Math.max(8, this.viewportRows?.() ?? 24);
-    const overlayRows = Math.max(6, Math.floor(terminalRows * 0.7) - 2);
-    const capacity = Math.max(3, overlayRows - 4); // reserve header + footer
     const scrolling = total > capacity;
-    const listRows = scrolling ? Math.max(1, capacity - 2) : total; // reserve ↑/↓ hints
+    const listRows = scrolling ? Math.max(1, capacity - 2) : total;
     const start = scrolling
       ? Math.min(
         Math.max(0, this.selectedIndex - Math.floor(listRows / 2)),
@@ -90,9 +151,8 @@ export class SectionNavigator {
       )
       : 0;
     const end = Math.min(total, start + listRows);
-
-    const lines = [this.theme.fg("accent", this.theme.bold("Sections")), ""];
-    if (start > 0) lines.push(this.theme.fg("dim", `  ↑ ${start} more`));
+    const lines = [];
+    if (scrolling) lines.push(start > 0 ? this.theme.fg("dim", `  ↑ ${start} more`) : "");
     for (let index = start; index < end; index += 1) {
       const section = this.sections[index];
       const selection = index === this.selectedIndex ? ">" : " ";
@@ -102,9 +162,62 @@ export class SectionNavigator {
         ? this.theme.fg("accent", label)
         : this.theme.fg("text", label));
     }
-    if (end < total) lines.push(this.theme.fg("dim", `  ↓ ${total - end} more`));
-    lines.push("", this.theme.fg("dim", "↑↓ select · Enter toggle · Esc close"));
-    return lines.map(truncate);
+    if (scrolling) lines.push(end < total ? this.theme.fg("dim", `  ↓ ${total - end} more`) : "");
+    return lines;
+  }
+
+  render(width) {
+    const renderWidth = Math.max(1, width);
+    const terminalRows = Math.max(8, this.viewportRows?.() ?? 24);
+    const overlayRows = Math.max(7, Math.floor(terminalRows * 0.8) - 2);
+    const selected = this.sections[this.selectedIndex];
+    const arrow = selected?.isExpanded() ? "▾" : "▸";
+    const footer = this.theme.fg(
+      "dim",
+      "↑↓ select · PgUp/PgDn detail · Enter toggle · Esc close",
+    );
+
+    if (renderWidth < 100) {
+      const detailRows = Math.max(1, overlayRows - 3);
+      const detail = this.windowDetail(
+        this.renderSectionDetail(selected, renderWidth),
+        detailRows,
+      );
+      const title = `${arrow} ${selected?.label ?? "Section"} (${this.selectedIndex + 1}/${this.sections.length})`;
+      return [
+        this.theme.fg("accent", this.theme.bold("Section detail")),
+        this.theme.fg("accent", title),
+        ...detail,
+        footer,
+      ].map((line) => truncateToWidth(line, renderWidth, "…"));
+    }
+
+    const divider = this.theme.fg("dim", " │ ");
+    const dividerWidth = 3;
+    const listWidth = Math.max(30, Math.floor((renderWidth - dividerWidth) * 0.38));
+    const detailWidth = Math.max(1, renderWidth - listWidth - dividerWidth);
+    const bodyRows = Math.max(1, overlayRows - 2);
+    const listLines = this.windowSections(bodyRows);
+    const detailLines = this.windowDetail(
+      this.renderSectionDetail(selected, detailWidth),
+      bodyRows,
+    );
+    const leftHeader = this.theme.fg("accent", this.theme.bold("Sections"));
+    const rightHeader = this.theme.fg("accent", this.theme.bold(`Detail · ${selected?.label ?? "Section"}`));
+    const fitColumn = (line, columnWidth) => {
+      const fitted = truncateToWidth(line ?? "", columnWidth, "…");
+      return fitted + " ".repeat(Math.max(0, columnWidth - visibleWidth(fitted)));
+    };
+    const rows = [
+      `${fitColumn(leftHeader, listWidth)}${divider}${fitColumn(rightHeader, detailWidth)}`,
+    ];
+    for (let row = 0; row < bodyRows; row += 1) {
+      rows.push(
+        `${fitColumn(listLines[row], listWidth)}${divider}${fitColumn(detailLines[row], detailWidth)}`,
+      );
+    }
+    rows.push(truncateToWidth(footer, renderWidth, "…"));
+    return rows;
   }
 
   invalidate() {}
@@ -135,6 +248,14 @@ export class RuntimeNotice {
       kind: "runtimeNotice",
       label: `${label} · ${this.level === "error" ? errorTitle(this.message) : "Attention"}`,
       isExpanded: () => this.isOpen,
+      renderDetail: (width) => renderErrorText(
+        this.theme,
+        this.level,
+        this.message,
+        true,
+      ).split("\n").map(
+        (line) => truncateToWidth(line, Math.max(1, width), "…"),
+      ),
       toggle: () => {
         this.isOpen = !this.isOpen;
         this.requestRender();

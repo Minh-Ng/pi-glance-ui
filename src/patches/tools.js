@@ -115,6 +115,20 @@ export async function patchCompactToolSpacing(
     }
     return baseRender.call(native, width);
   };
+  const renderExpandedDetail = (component, width) => {
+    const wasExpanded = component.expanded;
+    if (!wasExpanded) baseSetExpanded.call(component, true);
+    try {
+      const needsGenericDetailRenderer = component.toolDefinition
+        && typeof component.toolDefinition.renderCall !== "function"
+        && typeof component.toolDefinition.renderResult !== "function";
+      return needsGenericDetailRenderer
+        ? renderNative(component, width)
+        : baseRender.call(component, width);
+    } finally {
+      if (!wasExpanded) baseSetExpanded.call(component, false);
+    }
+  };
 
   prototype.setExpanded = function compactToolExpansion(isExpanded) {
     if (!isEnabled()) return baseSetExpanded.call(this, isExpanded);
@@ -144,6 +158,7 @@ export async function patchCompactToolSpacing(
         entry,
         this,
         (isExpanded) => baseSetExpanded.call(this, isExpanded),
+        (detailWidth) => renderExpandedDetail(this, detailWidth),
       );
       timeline.update(entry, { state: "running", theme, detail: () => [] });
       return [];
@@ -181,6 +196,7 @@ export async function patchCompactToolSpacing(
         entry,
         this,
         (isExpanded) => baseSetExpanded.call(this, isExpanded),
+        (detailWidth) => renderExpandedDetail(this, detailWidth),
       );
       const elapsed = clock.ended !== undefined
         ? ` · ${formatDuration(clock.ended - clock.started)}`
@@ -218,6 +234,7 @@ export async function patchCompactToolSpacing(
       entry,
       this,
       (isExpanded) => baseSetExpanded.call(this, isExpanded),
+      (detailWidth) => renderExpandedDetail(this, detailWidth),
     );
     const failed = !this.isPartial && Boolean(this.result?.isError);
     entry.state = failed ? "failed" : this.isPartial ? "running" : "complete";

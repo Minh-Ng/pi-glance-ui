@@ -1,5 +1,5 @@
 import { truncateToWidth } from "@earendil-works/pi-tui";
-import { activityPhaseForTool, activityToolPhaseLabel, groupLabel, groupLabelColor, renderBlockHeading, toolCategory } from "./format.js";
+import { activityPhaseForTool, activityToolPhaseLabel, groupLabel, groupLabelColor, renderBlockHeading, toolCategory, trimBlankLines } from "./format.js";
 
 const MAX_COLLAPSED_ACTIONS = 10;
 
@@ -209,6 +209,17 @@ export class ToolTimeline {
       kind: "tools",
       label: `${activityToolPhaseLabel(group.phase)} · ${groupLabel(group.category)} · ${group.entries.length} action${group.entries.length === 1 ? "" : "s"}`,
       isExpanded,
+      renderDetail: (width) => {
+        const lines = [];
+        for (const entry of group.entries) {
+          if (typeof entry.renderDetail !== "function") continue;
+          const detail = trimBlankLines(entry.renderDetail(width));
+          if (detail.length === 0) continue;
+          if (lines.length > 0) lines.push("");
+          lines.push(...detail);
+        }
+        return lines;
+      },
       toggle: () => {
         group.expandedOverride = !isExpanded();
         if (group.expandedOverride) {
@@ -231,8 +242,9 @@ export class ToolTimeline {
     return current === entry;
   }
 
-  attachComponent(entry, component, setExpanded) {
+  attachComponent(entry, component, setExpanded, renderDetail) {
     entry.component = component;
+    entry.renderDetail = renderDetail;
     entry.group.components.set(component, setExpanded);
     if (entry.group.expandedOverride === undefined) {
       entry.group.isGloballyExpanded = Boolean(component.expanded);

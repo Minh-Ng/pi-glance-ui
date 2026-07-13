@@ -38,7 +38,7 @@ Reload Pi after installation. Public compact tool rendering is enabled by defaul
 | --- | --- |
 | `Ctrl+O` | Toggle full detail for completed tools and, with patches on, Thinking and artifacts |
 | `Ctrl+T` | Show or hide Thinking when patches are on |
-| `/sections` or `Ctrl+Shift+O` | Choose one available section to expand or collapse |
+| `/sections` or `Ctrl+Shift+O` | Browse sections with an in-overlay detail viewer |
 | `/glance-ui` | Open the interactive settings panel (↑↓ select · ←/→ or Enter change · Esc close) |
 | `/glance-ui settings` | Print current settings and valid values as text |
 | `/glance-ui patches on` | Confirm and enable private layout patches for this Pi version |
@@ -46,7 +46,7 @@ Reload Pi after installation. Public compact tool rendering is enabled by defaul
 | `/glance-ui on` | Enable Glance UI rendering |
 | `/glance-ui off` | Restore Pi's native transcript presentation immediately |
 
-In the section navigator, use Up/Down to select, Enter or Space to toggle, and Escape to close.
+The section navigator renders the selected block beside the list (or full-width on narrow terminals). Use Up/Down to select, Page Up/Page Down to scroll long detail, Enter or Space to toggle the transcript section, and Escape to close.
 
 Running tools use `auto` detail by default: the bottom-most running tool stays compact and completed output follows `Ctrl+O`. Other modes are covered in the [Power User Guide](docs/power-user-guide.md#running-tools).
 
@@ -54,7 +54,7 @@ Settings are saved to `~/.pi/agent/glance-ui.json`.
 
 ## Troubleshooting
 
-- **Need one hidden result?** Open `/sections` and expand that action group.
+- **Need one hidden result?** Open `/sections`; the selected block is readable directly in its detail viewer.
 - **Want native layout with compact tools?** Run `/glance-ui patches off`. Installed wrappers delegate immediately; after restart, no private patches are installed.
 - **Want Pi's original presentation?** Run `/glance-ui off`. Existing and new transcript components switch immediately; `/glance-ui on` restores public compact tool rendering.
 - **See “layout extras unavailable”?** A private renderer compatibility probe failed. The private layout transaction was rolled back; public compact tool summaries remain available where compatible.

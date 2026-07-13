@@ -2,6 +2,12 @@
 
 All notable changes to Pi Glance UI will be documented here.
 
+## Unreleased
+
+- Add an in-overlay detail viewer to Ctrl+Shift+O: wide terminals show section list and selected content side by side, narrow terminals prioritize selected content, and Page Up/Page Down scrolls long blocks.
+- Preserve local section expansion through Pi's repeated global-state synchronization and transcript rebuilds.
+- Show complete arguments and results for expanded custom tools such as TaskCreate and TaskUpdate when they do not provide custom renderers.
+
 ## 0.2.4
 
 - Fix the Ctrl+Shift+O section navigator running off the page: the list is now windowed to the overlay's visible height with `↑ N more` / `↓ N more` indicators and always keeps the selected row on screen. Previously the list rendered from the top with no scrolling, so navigating down moved the selection (and the visible effect of toggling it) past the clipped overlay.
