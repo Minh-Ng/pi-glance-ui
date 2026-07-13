@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import { Spacer } from "@earendil-works/pi-tui";
 
+import { formatCompactThinkingText } from "../src/format.js";
 import { SectionController, SectionNavigator } from "../src/ui/sections.js";
 import { TranscriptSpacer } from "../src/ui/transcript-spacing.js";
 
@@ -87,6 +88,27 @@ test("transcript spacing benchmark", { skip: !enabled }, () => {
       iterations,
       msTotal: Number(ms.toFixed(1)),
       usPerNormalize: Number(((ms / iterations) * 1000).toFixed(2)),
+    }));
+  }
+});
+
+// Cost of repeatedly formatting the growing Thinking string delivered during
+// streaming. Compact mode deliberately keeps this independent of transcript
+// length; full content remains available through the detail renderer.
+test("progressive thinking benchmark", { skip: !enabled }, () => {
+  for (const updates of [600, 1200, 2400]) {
+    let source = "";
+    const startedAt = performance.now();
+    for (let i = 0; i < updates; i += 1) {
+      source += `reasoning step ${i} `;
+      formatCompactThinkingText(source);
+    }
+    const ms = performance.now() - startedAt;
+    console.log(JSON.stringify({
+      updates,
+      sourceCharacters: source.length,
+      msTotal: Number(ms.toFixed(1)),
+      usPerUpdate: Number(((ms / updates) * 1000).toFixed(2)),
     }));
   }
 });

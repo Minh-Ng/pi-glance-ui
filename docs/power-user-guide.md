@@ -16,7 +16,7 @@ Public compact rendering is active by default. It:
 - groups adjacent actions by phase and category;
 - keeps complete built-in tool content available through expansion.
 
-With the required private-patch consent active, Glance UI also formats the latest visible Thinking prose as a tree and makes native artifacts and other transcript sections available through expansion.
+With the required private-patch consent active, Glance UI also formats the latest visible Thinking prose as a tree and makes native artifacts and other transcript sections available through expansion. During streaming, the compact row keeps a bounded recent tail for stable render cost; the complete Thinking text remains available through expansion and the section viewer.
 
 ### Phases and categories
 
@@ -102,7 +102,7 @@ After `/glance-ui patches on` is confirmed for the running Pi version, Glance UI
 
 ## Compatibility
 
-Version 0.2.1 requires:
+The current release line requires:
 
 - `@earendil-works/pi-coding-agent` 0.80.6
 - `@earendil-works/pi-tui` 0.80.6

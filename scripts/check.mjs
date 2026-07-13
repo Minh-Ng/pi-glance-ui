@@ -15,6 +15,7 @@ async function javascriptFiles(directory) {
 const files = [
   ...await javascriptFiles("src"),
   ...await javascriptFiles("test"),
+  ...await javascriptFiles("scripts"),
 ];
 
 for (const file of files) {

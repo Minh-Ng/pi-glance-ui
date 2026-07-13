@@ -43,7 +43,8 @@
   "scripts": {
     "benchmark:start": "GLANCE_UI_BENCHMARK=1 node --test --test-name-pattern='startup render benchmark' test/glance-ui.test.js",
     "benchmark:perf": "GLANCE_UI_BENCHMARK=1 node --test test/benchmark.test.js",
-    "check": "node scripts/check.mjs",
+    "check": "node scripts/check.mjs && npm run check:release",
+    "check:release": "node scripts/check-release.mjs",
     "test": "node --test test/*.test.js",
     "prepublishOnly": "npm run check && npm test"
   },
