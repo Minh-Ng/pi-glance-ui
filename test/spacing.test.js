@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -59,6 +59,9 @@ test("Thinking spacing follows transcript boundaries live and after reconstructi
     rmSync(directory, { recursive: true, force: true });
   });
 
+  writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
+    patchesVersion: "0.80.6",
+  }));
   const target = harness();
   glanceUi(target.pi);
   const codingAgentEntry = import.meta.resolve("@earendil-works/pi-coding-agent");

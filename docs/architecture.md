@@ -10,6 +10,7 @@ src/
 ├── config.js                 # Persistent configuration
 ├── format.js                 # Classification and display formatting
 ├── timeline.js               # Action grouping and rendering state
+├── tools.js                  # Public compact tool definitions
 ├── ui/
 │   └── sections.js           # Section navigator and shared UI components
 └── patches/
@@ -45,11 +46,13 @@ Replacing these rows with extension-owned messages or widgets is not equivalent:
 
 Private paths are unsupported and can change in any Pi release. Glance UI therefore treats each supported Pi version as an explicit compatibility target:
 
-- Patch installation waits until `session_start`, after Pi's interactive theme exists.
+- Fresh installs use only public compact tool definitions; private patch modules are dynamically imported only after `/glance-ui patches on` confirmation.
+- Consent is stored for one exact Pi version. A missing or mismatched `patchesVersion` leaves private patches dormant.
+- Patch installation waits until the confirmed session's interactive theme exists.
 - Structural probes verify every private component and method before the transaction commits.
 - Installation snapshots exact prototype descriptors and rolls them back in reverse order if any installer, probe, or assistant stage fails.
 - A failed private transaction emits a warning and leaves public compact tool definitions available.
-- `/glance-ui off` makes installed wrappers delegate to Pi's native behavior immediately.
+- `/glance-ui patches off` makes installed wrappers delegate to Pi's native layout immediately and prevents installation after restart; `/glance-ui off` also disables public compact tools.
 - Release requirements pin the Pi versions exercised by unit, rollback, benchmark, and fresh-install startup tests.
 - Patches mutate prototypes only in the running process; they never edit Pi's installed source files.
 
@@ -97,7 +100,8 @@ Also verify interactively:
 5. Live and reconstructed grouping around custom messages.
 6. Terminal images followed by additional transcript content.
 7. Enabled and disabled presentation behavior.
-8. Compatibility failures at each private patch stage.
+8. Fresh startup and declined consent leave native prototype descriptors unchanged.
+9. Patch consent, version mismatch, opt-out, and compatibility failures at each private stage.
 
 ## Release safety
 
