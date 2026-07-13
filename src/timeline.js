@@ -161,7 +161,11 @@ export class ToolTimeline {
     group.entries.push(entry);
     turnEntries.push(entry);
     this.entriesById.set(id, entry);
-    this.registerGroupSection(group);
+    // The rebuild prepass establishes grouping before Pi creates components,
+    // but registering sections here would put every tool group ahead of every
+    // subsequently rendered Thinking block. Attach-time registration below
+    // follows Pi's chronological transcript render and preserves interleaving.
+    if (!this.isRebuildingTranscript) this.registerGroupSection(group);
     return entry;
   }
 
