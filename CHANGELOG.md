@@ -4,6 +4,8 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+## 0.2.4
+
 - Load version checks and built-in tool factories from the running Pi installation so consent and private patches always target the same module graph.
 - Strip terminal control sequences from compact summaries, errors, paths, Thinking prose, and custom artifacts before rendering them.
 - Migrate constructor-owned state when an extension hot reload retains shared runtime objects, preventing new fields from being absent on older instances.
@@ -15,9 +17,6 @@ All notable changes to Pi Glance UI will be documented here.
 - Add an in-overlay detail viewer to Ctrl+Shift+O: wide terminals show section list and selected content side by side, narrow terminals prioritize selected content, Page Up/Page Down scrolls long blocks, and the UI labels its top-recent/bottom-older ordering.
 - Preserve local section expansion through Pi's repeated global-state synchronization and transcript rebuilds.
 - Show complete arguments and results for expanded custom tools such as TaskCreate and TaskUpdate when they do not provide custom renderers.
-
-## 0.2.4
-
 - Fix the Ctrl+Shift+O section navigator running off the page: the list is now windowed to the overlay's visible height with `↑ N more` / `↓ N more` indicators and always keeps the selected row on screen. Previously the list rendered from the top with no scrolling, so navigating down moved the selection (and the visible effect of toggling it) past the clipped overlay.
 - Add `benchmark:perf` micro-benchmarks for the section navigator and transcript-spacing passes.
 

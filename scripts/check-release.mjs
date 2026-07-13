@@ -18,13 +18,14 @@ if (installRefs.length !== 1) {
 }
 
 const [installRef] = installRefs;
+const packageRef = `v${packageJson.version}`;
 const tagCheck = spawnSync(
   "git",
   ["rev-parse", "--verify", "--quiet", `refs/tags/${installRef}^{commit}`],
   { stdio: "ignore" },
 );
 if (tagCheck.error) throw tagCheck.error;
-if (tagCheck.status !== 0) {
+if (tagCheck.status !== 0 && installRef !== packageRef) {
   throw new Error(`README install ref ${installRef} does not resolve to a local Git tag`);
 }
 
@@ -36,7 +37,10 @@ if (
 }
 
 if (process.env.GITHUB_REF_TYPE === "tag") {
-  const releaseRef = `v${packageJson.version}`;
+  const releaseRef = packageRef;
+  if (tagCheck.status !== 0) {
+    throw new Error(`release tag ${releaseRef} is not available in the checkout`);
+  }
   if (process.env.GITHUB_REF_NAME !== releaseRef) {
     throw new Error(
       `release tag ${process.env.GITHUB_REF_NAME} does not match package version ${packageJson.version}`,
@@ -47,4 +51,5 @@ if (process.env.GITHUB_REF_TYPE === "tag") {
   }
 }
 
-console.log(`release metadata valid: README uses existing ${installRef}`);
+const tagState = tagCheck.status === 0 ? "existing" : "pending package release";
+console.log(`release metadata valid: README uses ${tagState} ${installRef}`);

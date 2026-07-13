@@ -27,7 +27,7 @@ Glance UI changes transcript presentation only. It does not change how tools exe
 ## Install
 
 ```bash
-pi install git:github.com/Minh-Ng/pi-glance-ui@v0.2.3
+pi install git:github.com/Minh-Ng/pi-glance-ui@v0.2.4
 ```
 
 Reload Pi after installation, then enable the version-scoped patches:
