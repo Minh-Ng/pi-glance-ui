@@ -4,6 +4,10 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+## 0.2.6
+
+- Fix doubled blank lines in replayed transcripts after `/reload` or `/resume`: transcript-spacing bookkeeping now survives extension-generation handoffs (registered symbols plus a structural never-stack guard), so the new generation no longer inserts a second separator before replayed Thinking and action groups.
+
 ## 0.2.5
 
 - Preserve validated private-patch state while `/resume` replays the replacement session before its `session_start`, so historical Thinking and tools remain compact; removed or changed consent still disables inherited wrappers immediately.
