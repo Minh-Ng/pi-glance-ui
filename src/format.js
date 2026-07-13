@@ -237,6 +237,52 @@ export function formatThinkingText(value, isExpanded) {
   return [`${thinkingGlyph} ${disclosure} Thinking`, ...branches].join("  \n");
 }
 
+// Re-wrap already-formatted thinking text to a target width with a hanging
+// indent, so wrapped continuation lines stay aligned under their branch
+// connector ("  ├ ") or the "Thinking:" label instead of falling to column 0.
+// The host Text component applies only a uniform paddingX and cannot hang-indent.
+export function wrapThinkingLines(value, width) {
+  const maxWidth = Math.max(8, Math.floor(Number(width)) || 8);
+  return String(value)
+    .split("\n")
+    .map((line) => wrapThinkingLine(line, maxWidth))
+    .join("\n");
+}
+
+function glyphLength(value) {
+  return Array.from(String(value)).length;
+}
+
+function wrapThinkingLine(line, maxWidth) {
+  if (glyphLength(line) <= maxWidth) return line;
+  const prefixMatch = line.match(/^(\s*(?:[○●] )?[▸▾] Thinking:\s+|\s*[├└]\s+)/);
+  // Only branch ("  ├ ") and "Thinking:" label lines carry wrappable prose. Leave
+  // any other line (e.g. the bare "○ ▸ Thinking" header) intact so it is never
+  // broken across the margin.
+  if (!prefixMatch) return line;
+  const prefix = prefixMatch[0];
+  const indent = " ".repeat(glyphLength(prefix));
+  const body = line.slice(prefix.length);
+  const available = Math.max(4, maxWidth - indent.length);
+  const words = body.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return line;
+  const segments = [];
+  let current = "";
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (glyphLength(candidate) > available && current) {
+      segments.push(current);
+      current = word;
+    } else {
+      current = candidate;
+    }
+  }
+  if (current) segments.push(current);
+  return segments
+    .map((segment, index) => (index === 0 ? prefix : indent) + segment)
+    .join("\n");
+}
+
 export function unwrapFormattedThinkingText(value) {
   let text = String(value).trim();
   for (;;) {

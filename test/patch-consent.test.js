@@ -36,7 +36,6 @@ function createHarness(confirmations) {
     notify(message, level) {
       notifications.push({ message, level });
     },
-    requestRender() {},
     setHiddenThinkingLabel(label) {
       hiddenThinkingLabel = label;
     },
@@ -142,6 +141,13 @@ test("private layout patches require explicit version-scoped consent", async (t)
   });
 
   const command = target.registeredCommands.get("glance-ui").handler;
+  await command("off", target.ctx);
+  await command("on", target.ctx);
+  assert.deepEqual(target.notifications.at(-1), {
+    message: "Glance UI enabled: on · compact tool rendering active · saved",
+    level: "info",
+  });
+
   await command("patches on", target.ctx);
   assert.equal(target.confirmationRequests.length, 1);
   assert.deepEqual(target.notifications.at(-1), {
@@ -196,9 +202,9 @@ test("private layout patches require explicit version-scoped consent", async (t)
   assert.doesNotMatch(nativeThinking, /○ ▸ Thinking/);
   assert.match(nativeThinking, /Thinking hidden/);
   assert.ok(
-    target.registeredTools.every(
+    target.registeredTools.slice(-7).every(
       (tool) => tool[Symbol.for("pi-compact-ui.original-tool-definition")],
     ),
-    "patch opt-out must not disable public compact tools",
+    "patch opt-out must not disable the latest public compact tool definitions",
   );
 });

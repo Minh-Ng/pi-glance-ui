@@ -6,8 +6,7 @@ export async function patchCompactRuntimeErrors(
   timeline,
   sectionController,
   resetAssistantSections,
-  recordTranscriptAdjacency,
-  normalizeConsecutiveThinkingSpacing,
+  normalizeTranscriptSpacing,
   isEnabled,
   transaction,
 ) {
@@ -62,9 +61,24 @@ export async function patchCompactRuntimeErrors(
 
   prototype.handleEvent = async function compactHandleEvent(event) {
     const result = await baseHandleEvent.call(this, event);
-    if (event.type === "message_start" && event.message?.role === "assistant") {
-      recordTranscriptAdjacency(this.chatContainer?.children);
-      if (isEnabled()) normalizeConsecutiveThinkingSpacing(this.chatContainer?.children);
+    // Tool rows are appended mid-stream on `message_update` (when a toolCall
+    // content item first streams in), not on `message_start`. If we only
+    // normalized on message_start, the prose→action-group separator would not
+    // exist yet when the tool row first paints, then pop in a beat later once the
+    // next message_start fired — a visible flicker. Re-run the normalize on
+    // update/end as well so the blank line is present in the same frame the tool
+    // row appears. The message_update case is guarded to toolCall-bearing frames
+    // so ordinary per-token text streaming does not pay for a normalize pass.
+    const message = event.message;
+    const streamingHasToolCall = Array.isArray(message?.content)
+      && message.content.some((item) => item.type === "toolCall");
+    const shouldNormalize = message?.role === "assistant" && (
+      event.type === "message_start"
+      || event.type === "message_end"
+      || (event.type === "message_update" && streamingHasToolCall)
+    );
+    if (shouldNormalize && isEnabled()) {
+      normalizeTranscriptSpacing(this.chatContainer?.children);
     }
     return result;
   };
@@ -81,7 +95,7 @@ export async function patchCompactRuntimeErrors(
     timeline.rebuildFromMessages(messages, this.streamingMessage);
     try {
       const result = baseRenderSessionEntries.call(this, entries, options);
-      normalizeConsecutiveThinkingSpacing(this.chatContainer?.children);
+      normalizeTranscriptSpacing(this.chatContainer?.children);
       return result;
     } finally {
       timeline.finishTranscriptRebuild();
