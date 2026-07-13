@@ -340,6 +340,67 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   assert.match(expanded, /action-0/);
   assert.match(expanded, /action-11/);
 
+  const taskToolCases = [
+    {
+      name: "TaskCreate",
+      id: "task-create-detail",
+      args: {
+        subject: "Preserve complete task details",
+        description: "Show every TaskCreate field when tool output is expanded.",
+        activeForm: "Preserving complete task details",
+      },
+      expectedValues: [
+        "Preserve complete task details",
+        "Show every TaskCreate field when tool output is expanded.",
+        "Preserving complete task details",
+      ],
+      result: "Task #42 created successfully: Preserve complete task details",
+    },
+    {
+      name: "TaskUpdate",
+      id: "task-update-detail",
+      args: {
+        taskId: "42",
+        status: "in_progress",
+        owner: "main-thread",
+        metadata: { source: "expanded-tool-regression" },
+      },
+      expectedValues: ["42", "in_progress", "main-thread", "expanded-tool-regression"],
+      result: "Updated task #42 status, owner, metadata",
+    },
+  ];
+  for (const taskTool of taskToolCases) {
+    await startTool(harness, taskTool.id, taskTool.name, taskTool.args);
+    const component = new ToolExecutionComponent(
+      taskTool.name,
+      taskTool.id,
+      taskTool.args,
+      {},
+      {
+        name: taskTool.name,
+        label: taskTool.name,
+        description: `${taskTool.name} test definition without custom renderers`,
+        parameters: {},
+      },
+      harness.ui,
+      harness.ctx.cwd,
+    );
+    component.markExecutionStarted();
+    component.setArgsComplete();
+    component.updateResult({
+      content: [{ type: "text", text: taskTool.result }],
+      details: {},
+      isError: false,
+    });
+    component.setExpanded(true);
+    const taskDetail = plain(component.render(200));
+    assert.ok(taskDetail.includes(taskTool.name));
+    for (const value of taskTool.expectedValues) {
+      assert.ok(taskDetail.includes(value), `missing ${value} from:\n${taskDetail}`);
+    }
+    assert.ok(taskDetail.includes(taskTool.result));
+  }
+
   await emitAsync(harness, "before_agent_start");
   const categorizedTools = [
     ["inspect_file", "inspect"],
