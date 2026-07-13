@@ -1551,7 +1551,12 @@ test("startup render benchmark", {
           component.markExecutionStarted();
           component.setArgsComplete();
           component.updateResult({
-            content: [{ type: "text", text: `result ${toolCall.id}` }],
+            // Realistic multi-line output so the expanded (Ctrl+O) render cost is
+            // representative; collapsed compact rendering ignores the body.
+            content: [{
+              type: "text",
+              text: Array.from({ length: 30 }, (_, line) => `result ${toolCall.id} line ${line}`).join("\n"),
+            }],
             details: {},
             isError: false,
           });
@@ -1567,6 +1572,19 @@ test("startup render benchmark", {
   const renderStartedAt = performance.now();
   const renderedLines = components.flatMap((component) => component.render(160));
   const renderMs = performance.now() - renderStartedAt;
+
+  // Simulate Ctrl+O (toggleToolOutputExpansion): flip expanded on every tool,
+  // then re-render. This is the path the user reports as slow.
+  const expandToggleStartedAt = performance.now();
+  for (const component of components) component.setExpanded(true);
+  const expandToggleMs = performance.now() - expandToggleStartedAt;
+  const expandedRenderStartedAt = performance.now();
+  const expandedLines = components.flatMap((component) => component.render(160));
+  const expandedRenderMs = performance.now() - expandedRenderStartedAt;
+  const expandedCachedStartedAt = performance.now();
+  components.flatMap((component) => component.render(160));
+  const expandedCachedMs = performance.now() - expandedCachedStartedAt;
+  for (const component of components) component.setExpanded(false);
 
   await harness.registeredCommands.get("glance-ui").handler("off", harness.ctx);
   const nativeRenderStartedAt = performance.now();
@@ -1588,5 +1606,9 @@ test("startup render benchmark", {
     nativeCloneRenderMs: Number(nativeRenderMs.toFixed(1)),
     nativeLines: nativeLines.length,
     cachedNativeRenderMs: Number(cachedNativeRenderMs.toFixed(1)),
+    expandToggleMs: Number(expandToggleMs.toFixed(1)),
+    expandedRenderMs: Number(expandedRenderMs.toFixed(1)),
+    expandedLines: expandedLines.length,
+    expandedCachedMs: Number(expandedCachedMs.toFixed(1)),
   }));
 });

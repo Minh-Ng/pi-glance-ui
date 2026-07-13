@@ -1,6 +1,6 @@
 {
   "name": "pi-glance-ui",
-  "version": "0.2.3",
+  "version": "0.2.4",
   "type": "module",
   "description": "At-a-glance recent-action and thinking renderers for Pi",
   "author": "Minh Nguyen",
@@ -42,6 +42,7 @@
   },
   "scripts": {
     "benchmark:start": "GLANCE_UI_BENCHMARK=1 node --test --test-name-pattern='startup render benchmark' test/glance-ui.test.js",
+    "benchmark:perf": "GLANCE_UI_BENCHMARK=1 node --test test/benchmark.test.js",
     "check": "node scripts/check.mjs",
     "test": "node --test test/*.test.js",
     "prepublishOnly": "npm run check && npm test"

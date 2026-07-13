@@ -2,6 +2,11 @@
 
 All notable changes to Pi Glance UI will be documented here.
 
+## 0.2.4
+
+- Fix the Ctrl+Shift+O section navigator running off the page: the list is now windowed to the overlay's visible height with `↑ N more` / `↓ N more` indicators and always keeps the selected row on screen. Previously the list rendered from the top with no scrolling, so navigating down moved the selection (and the visible effect of toggling it) past the clipped overlay.
+- Add `benchmark:perf` micro-benchmarks for the section navigator and transcript-spacing passes.
+
 ## 0.2.3
 
 - `/glance-ui` now opens an interactive, live-updating settings panel (enabled / patches / working-detail) navigable with the keyboard; values update in place as they change. `/glance-ui settings` still prints the text summary, and the panel falls back to text when custom overlays are unavailable (RPC/print modes). Preserves the version-gated confirmation before enabling private layout patches.
