@@ -1,7 +1,7 @@
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 import { Spacer, Text } from "@earendil-works/pi-tui";
-import { compactWhitespace, compatibilityError, errorTitle, formatThinkingText, renderErrorText, unwrapFormattedThinkingText } from "../format.js";
+import { compactWhitespace, compatibilityError, errorTitle, formatThinkingText, renderErrorText, unwrapFormattedThinkingText, wrapThinkingLines } from "../format.js";
 import { patchCompactCustomMessages } from "./custom-messages.js";
 import { patchCompactFooter, patchCompactUserMessages } from "./chrome.js";
 import { patchCompactMarkdown } from "./markdown.js";
@@ -56,6 +56,7 @@ export async function patchHiddenThinkingLayout(
   const filteredMessages = new WeakSet();
   const errorStateByComponent = new WeakMap();
   const thinkingStateByComponent = new WeakMap();
+  const compactThinkingRawText = Symbol("compact-thinking-raw-text");
   const suppressLeadingThinkingSpacer = Symbol("suppress-leading-thinking-spacer");
   const previousTranscriptContent = Symbol("previous-transcript-content");
   let assistantGeneration = 0;
@@ -318,10 +319,14 @@ export async function patchHiddenThinkingLayout(
           if (
             child?.defaultTextStyle?.italic === true
             && compactThinking.has(child.text)
-            && child.paddingX !== 0
           ) {
-            child.paddingX = 0;
-            child.invalidate?.();
+            // Stash the unwrapped source so render() can re-wrap idempotently
+            // to the live width with a hanging indent.
+            child[compactThinkingRawText] = child.text;
+            if (child.paddingX !== 0) {
+              child.paddingX = 0;
+              child.invalidate?.();
+            }
           }
         }
         refreshThinkingSpacing(component);
@@ -335,6 +340,18 @@ export async function patchHiddenThinkingLayout(
       if (this[renderedMode] !== isEnabled()) {
         const source = this[originalMessage] || this.lastMessage;
         if (source) this.updateContent(source);
+      }
+      if (isEnabled() && this.contentContainer?.children) {
+        for (const child of this.contentContainer.children) {
+          const raw = child?.[compactThinkingRawText];
+          if (raw === undefined) continue;
+          const contentWidth = Math.max(8, width - (child.paddingX ?? 0) * 2);
+          const wrapped = wrapThinkingLines(raw, contentWidth);
+          if (child.text !== wrapped) {
+            child.text = wrapped;
+            child.invalidate?.();
+          }
+        }
       }
       return baseRender.call(this, width);
     };
