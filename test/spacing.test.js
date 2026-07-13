@@ -9,6 +9,7 @@ import glanceUi from "../src/index.js";
 
 function harness() {
   const handlers = new Map();
+  const commands = new Map();
   return {
     pi: {
       on(event, handler) {
@@ -16,11 +17,12 @@ function harness() {
         registered.push(handler);
         handlers.set(event, registered);
       },
-      registerCommand() {},
+      registerCommand(name, command) { commands.set(name, command); },
       registerShortcut() {},
       registerTool() {},
     },
     handlers,
+    commands,
     ctx: {
       cwd: process.cwd(),
       sessionManager: {},
@@ -48,6 +50,151 @@ function leadingBlankRows(component, width) {
   }
   return count;
 }
+
+test("a text-bearing message gains one blank line before a following action group, removed otherwise", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-sep-"));
+  const previousConfig = process.env.PI_GLANCE_UI_CONFIG;
+  process.env.PI_GLANCE_UI_CONFIG = join(directory, "glance-ui.json");
+  t.after(() => {
+    if (previousConfig === undefined) delete process.env.PI_GLANCE_UI_CONFIG;
+    else process.env.PI_GLANCE_UI_CONFIG = previousConfig;
+    rmSync(directory, { recursive: true, force: true });
+  });
+  writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
+    enabled: true,
+    patchesVersion: "0.80.6",
+    workingDetailMode: "auto",
+  }));
+
+  const target = harness();
+  glanceUi(target.pi);
+  const codingAgentEntry = import.meta.resolve("@earendil-works/pi-coding-agent");
+  const [{ initTheme }, { AssistantMessageComponent }, { UserMessageComponent }, { InteractiveMode }] =
+    await Promise.all([
+      import(new URL("./modes/interactive/theme/theme.js", codingAgentEntry).href),
+      import(new URL("./modes/interactive/components/assistant-message.js", codingAgentEntry).href),
+      import(new URL("./modes/interactive/components/user-message.js", codingAgentEntry).href),
+      import(new URL("./modes/interactive/interactive-mode.js", codingAgentEntry).href),
+    ]);
+  initTheme("dark");
+  await emit(target, "session_start");
+
+  const isSpacer = (component) => component?.constructor?.name === "Spacer";
+  const trailingSpacers = (component) => {
+    const children = component.contentContainer?.children ?? [];
+    let count = 0;
+    for (let i = children.length - 1; i >= 0 && isSpacer(children[i]); i -= 1) count += 1;
+    return count;
+  };
+  const normalize = (children) => InteractiveMode.prototype.renderSessionEntries.call(
+    { chatContainer: { children }, renderSessionItems() {} },
+    [],
+  );
+
+  const prose = new AssistantMessageComponent(
+    { role: "assistant", content: [{ type: "text", text: "Yes\u2014intentionally." }], stopReason: "stop" },
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const toolStub = { constructor: { name: "ToolExecutionComponent" } };
+  const userAfter = new UserMessageComponent("ok");
+
+  // Followed by a tool/action group -> exactly one trailing blank line.
+  normalize([prose, toolStub]);
+  assert.equal(trailingSpacers(prose), 1, "one blank line before the action group");
+  // Idempotent: re-normalizing must not stack another blank.
+  normalize([prose, toolStub]);
+  assert.equal(trailingSpacers(prose), 1, "separator must not stack on re-render");
+  // Successor is no longer a tool -> separator removed (not needed).
+  normalize([prose, userAfter]);
+  assert.equal(trailingSpacers(prose), 0, "separator removed when no action group follows");
+  // Message becomes last in the transcript -> also removed.
+  normalize([prose, toolStub]);
+  assert.equal(trailingSpacers(prose), 1);
+  normalize([prose]);
+  assert.equal(trailingSpacers(prose), 0, "separator removed when the message is last");
+});
+
+test("only thinking-only blocks collapse leading spacing; text-bearing messages match native", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-parity-"));
+  const previousConfig = process.env.PI_GLANCE_UI_CONFIG;
+  process.env.PI_GLANCE_UI_CONFIG = join(directory, "glance-ui.json");
+  t.after(() => {
+    if (previousConfig === undefined) delete process.env.PI_GLANCE_UI_CONFIG;
+    else process.env.PI_GLANCE_UI_CONFIG = previousConfig;
+    rmSync(directory, { recursive: true, force: true });
+  });
+  writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
+    enabled: true,
+    patchesVersion: "0.80.6",
+    workingDetailMode: "auto",
+  }));
+
+  const target = harness();
+  glanceUi(target.pi);
+  const codingAgentEntry = import.meta.resolve("@earendil-works/pi-coding-agent");
+  const [{ initTheme }, { AssistantMessageComponent }] = await Promise.all([
+    import(new URL("./modes/interactive/theme/theme.js", codingAgentEntry).href),
+    import(new URL("./modes/interactive/components/assistant-message.js", codingAgentEntry).href),
+  ]);
+  initTheme("dark");
+  await emit(target, "session_start");
+
+  const widths = [40, 80, 160];
+  const make = (content) => new AssistantMessageComponent(
+    { role: "assistant", content, stopReason: "stop" },
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const cases = {
+    thinkingOnly: () => make([{ type: "thinking", thinking: "t" }]),
+    thinkingPlusText: () => make([
+      { type: "thinking", thinking: "t" },
+      { type: "text", text: "All 22 tests pass, diagnostics clean." },
+    ]),
+    textOnly: () => make([{ type: "text", text: "All 22 tests pass." }]),
+  };
+
+  const measure = (components) => Object.fromEntries(
+    Object.entries(components).map(([name, component]) => [
+      name,
+      widths.map((width) => leadingBlankRows(component, width)),
+    ]),
+  );
+
+  const glanceComponents = Object.fromEntries(
+    Object.entries(cases).map(([name, factory]) => [name, factory()]),
+  );
+  const glanceRows = measure(glanceComponents);
+
+  // Toggle glance off in-process to capture the true native baseline; the
+  // render path re-runs updateContent when the enabled state changes.
+  const command = target.commands.get("glance-ui").handler;
+  const nativeComponents = Object.fromEntries(
+    Object.entries(cases).map(([name, factory]) => [name, factory()]),
+  );
+  await command("off", target.ctx);
+  const nativeRows = measure(nativeComponents);
+  // Restore shared runtime state so later tests still see glance enabled.
+  await command("on", target.ctx);
+
+  // Text-bearing messages must be spaced exactly like native Pi.
+  assert.deepEqual(glanceRows.thinkingPlusText, nativeRows.thinkingPlusText,
+    "thinking+text must match native leading spacing");
+  assert.deepEqual(glanceRows.textOnly, nativeRows.textOnly,
+    "text-only must match native leading spacing");
+  // The only intentional divergence: thinking-only blocks collapse their blank.
+  assert.ok(
+    glanceRows.thinkingOnly.every((n, i) => n <= nativeRows.thinkingOnly[i]),
+    "thinking-only must not add blank rows vs native",
+  );
+  assert.ok(
+    glanceRows.thinkingOnly.some((n, i) => n < nativeRows.thinkingOnly[i]),
+    "thinking-only should collapse at least one native blank row",
+  );
+});
 
 test("Thinking spacing follows transcript boundaries live and after reconstruction", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-spacing-"));
