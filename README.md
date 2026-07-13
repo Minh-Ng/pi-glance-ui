@@ -39,7 +39,8 @@ Reload Pi after installation. Public compact tool rendering is enabled by defaul
 | `Ctrl+O` | Toggle full detail for completed tools and, with patches on, Thinking and artifacts |
 | `Ctrl+T` | Show or hide Thinking when patches are on |
 | `/sections` or `Ctrl+Shift+O` | Choose one available section to expand or collapse |
-| `/glance-ui` | Show current settings and valid values |
+| `/glance-ui` | Open the interactive settings panel (↑↓ select · ←/→ or Enter change · Esc close) |
+| `/glance-ui settings` | Print current settings and valid values as text |
 | `/glance-ui patches on` | Confirm and enable private layout patches for this Pi version |
 | `/glance-ui patches off` | Use native transcript layout while retaining compact tools |
 | `/glance-ui on` | Enable Glance UI rendering |

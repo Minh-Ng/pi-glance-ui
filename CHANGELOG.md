@@ -2,6 +2,11 @@
 
 All notable changes to Pi Glance UI will be documented here.
 
+## 0.2.4
+
+- `/glance-ui` now opens an interactive, live-updating settings panel (enabled / patches / working-detail) navigable with the keyboard; values update in place as they are changed. `/glance-ui settings` still prints the text summary, and the panel falls back to text when custom overlays are unavailable (RPC/print modes).
+- Preserves the version-gated confirmation before enabling private layout patches.
+
 ## 0.2.3
 
 - Fix wrapped Thinking lines breaking out to the left margin: re-wrap thinking prose to the live render width with a hanging indent so continuation lines stay aligned under their branch connector or the `Thinking:` label. Covers both multi-section and single-section (inline) thinking.

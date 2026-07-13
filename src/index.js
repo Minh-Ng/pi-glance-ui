@@ -14,6 +14,7 @@ import { activityPhaseForTool, compactWhitespace, compatibilityError, toolCatego
 import { compactDefinition } from "./tools.js";
 import { ToolTimeline } from "./timeline.js";
 import { SectionController, SectionNavigator } from "./ui/sections.js";
+import { SettingsPanel } from "./ui/settings-panel.js";
 
 export { loadGlanceUiConfig, saveGlanceUiConfig } from "./config.js";
 
@@ -262,13 +263,164 @@ export default function glanceUi(pi) {
     handler: async (ctx) => showSections(ctx),
   });
 
+  const applyEnabled = async (nextEnabled, ctx) => {
+    enabled = nextEnabled;
+    sharedRuntime.publicEnabled = enabled;
+    if (enabled && patchesVersion === VERSION) {
+      const compatibility = await ensureLayoutPatch();
+      if (!compatibility.ok) notifyPatchFailure(ctx, compatibility);
+    }
+    syncLegacyPatchState();
+    if (!enabled) {
+      sectionController.removeKinds([
+        "assistantError",
+        "custom",
+        "runtimeNotice",
+        "thinking",
+        "tools",
+      ]);
+    }
+    const saved = persistSettings(ctx);
+    installTools(ctx.cwd || cwd || process.cwd(), ctx);
+    ctx.ui.requestRender?.();
+    const effect = enabled ? "compact tool rendering active" : "native Pi rendering active";
+    ctx.ui.notify(
+      `Glance UI enabled: ${enabled ? "on" : "off"} · ${effect} · ${saved ? "saved" : "session only"}`,
+      saved ? "info" : "warning",
+    );
+  };
+
+  const applyPatches = async (turnOn, ctx) => {
+    if (!turnOn) {
+      patchesVersion = undefined;
+      sharedRuntime.patchesVersion = undefined;
+      sharedRuntime.patchesActive = false;
+      syncLegacyPatchState();
+      removePrivateSections();
+      updatePatchPresentation(ctx);
+      const saved = persistSettings(ctx);
+      ctx.ui.requestRender?.();
+      ctx.ui.notify(
+        `Glance UI private patches: off · native layout active · ${saved ? "saved" : "session only"}`,
+        saved ? "info" : "warning",
+      );
+      return;
+    }
+    if (!enabled) {
+      ctx.ui.notify("Enable Glance UI before enabling private patches.", "warning");
+      return;
+    }
+    if (!SUPPORTED_PATCH_VERSIONS.has(VERSION)) {
+      ctx.ui.notify(
+        `Glance UI private patches are not available for untested Pi ${VERSION}.`,
+        "warning",
+      );
+      return;
+    }
+    if (patchesVersion === VERSION && sharedRuntime.patchesActive) {
+      ctx.ui.notify(`Glance UI private patches are already on for Pi ${VERSION}.`, "info");
+      return;
+    }
+    const confirmed = await ctx.ui.confirm(
+      "Enable private layout patches?",
+      `This applies tested in-memory prototype patches to Pi ${VERSION}. No installed files are changed. Approval expires when Pi's version changes.`,
+    );
+    if (!confirmed) {
+      ctx.ui.notify("Glance UI private patches remain off.", "info");
+      return;
+    }
+    const compatibility = await ensureLayoutPatch();
+    if (!compatibility.ok) {
+      notifyPatchFailure(ctx, compatibility);
+      return;
+    }
+    patchesVersion = VERSION;
+    sharedRuntime.patchesVersion = VERSION;
+    syncLegacyPatchState();
+    updatePatchPresentation(ctx);
+    const saved = persistSettings(ctx);
+    ctx.ui.requestRender?.();
+    ctx.ui.notify(
+      `Glance UI private patches: on for Pi ${VERSION} · ${saved ? "saved" : "session only"}`,
+      saved ? "info" : "warning",
+    );
+  };
+
+  const applyWorkingDetail = async (value, ctx) => {
+    workingDetailMode = value;
+    sharedRuntime.workingDetailMode = value;
+    const saved = persistSettings(ctx);
+    ctx.ui.notify(
+      `Glance UI working-detail: ${value} · ${workingDetailEffects[value]} · ${saved ? "saved" : "session only"}`,
+      saved ? "info" : "warning",
+    );
+  };
+
+  const applySettingByKey = (key, value, ctx) => {
+    if (key === "enabled") return applyEnabled(value === "on", ctx);
+    if (key === "patches") return applyPatches(value === "on", ctx);
+    if (key === "working-detail") return applyWorkingDetail(value, ctx);
+    return undefined;
+  };
+
+  const settingsRows = () => [
+    {
+      key: "enabled",
+      label: "enabled",
+      value: enabled ? "on" : "off",
+      values: ["on", "off"],
+      effect: enabled ? "compact tool rendering is active" : "native Pi rendering is active",
+    },
+    {
+      key: "patches",
+      label: "patches",
+      value: patchesVersion === VERSION && sharedRuntime.patchesActive ? "on" : "off",
+      values: ["on", "off"],
+      effect: `optional native transcript layout patches (${patchStatus()})`,
+    },
+    {
+      key: "working-detail",
+      label: "working-detail",
+      value: workingDetailMode,
+      values: [...WORKING_DETAIL_MODES],
+      effect: workingDetailEffects[workingDetailMode],
+    },
+  ];
+
+  const openSettingsPanel = async (ctx) => {
+    if (typeof ctx.ui.custom !== "function") {
+      ctx.ui.notify(settingsSummary(), "info");
+      return;
+    }
+    await ctx.ui.custom((tui, theme, _keybindings, done) => new SettingsPanel({
+      theme,
+      getRows: settingsRows,
+      onChange: (key, value) => applySettingByKey(key, value, ctx),
+      requestRender: () => tui.requestRender(),
+      onClose: () => done(undefined),
+    }), {
+      overlay: true,
+      overlayOptions: {
+        width: "60%",
+        maxHeight: "70%",
+        anchor: "center",
+        margin: 1,
+      },
+    });
+  };
+
   pi.registerCommand("glance-ui", {
-    description: "Show or update persistent Glance UI settings",
+    description: "Open the Glance UI settings panel or update a setting",
     handler: async (raw, ctx) => {
       const requested = raw.trim().toLowerCase();
       let tokens = requested ? requested.split(/\s+/) : [];
 
       if (tokens[0] === "install-patch") tokens = ["patches", "on"];
+      // A bare `/glance-ui` opens the interactive, live-updating panel.
+      if (tokens.length === 0) {
+        await openSettingsPanel(ctx);
+        return;
+      }
       if (["settings", "config"].includes(tokens[0])) tokens = tokens.slice(1);
       if (
         tokens.length === 0
@@ -285,30 +437,7 @@ export default function glanceUi(pi) {
           ctx.ui.notify("Usage: /glance-ui settings enabled on|off", "warning");
           return;
         }
-        enabled = requestedValue === "on";
-        sharedRuntime.publicEnabled = enabled;
-        if (enabled && patchesVersion === VERSION) {
-          const compatibility = await ensureLayoutPatch();
-          if (!compatibility.ok) notifyPatchFailure(ctx, compatibility);
-        }
-        syncLegacyPatchState();
-        if (!enabled) {
-          sectionController.removeKinds([
-            "assistantError",
-            "custom",
-            "runtimeNotice",
-            "thinking",
-            "tools",
-          ]);
-        }
-        const saved = persistSettings(ctx);
-        installTools(ctx.cwd || cwd || process.cwd(), ctx);
-        ctx.ui.requestRender?.();
-        const effect = enabled ? "compact tool rendering active" : "native Pi rendering active";
-        ctx.ui.notify(
-          `Glance UI enabled: ${requestedValue} · ${effect} · ${saved ? "saved" : "session only"}`,
-          saved ? "info" : "warning",
-        );
+        await applyEnabled(requestedValue === "on", ctx);
         return;
       }
 
@@ -317,59 +446,7 @@ export default function glanceUi(pi) {
           ctx.ui.notify("Usage: /glance-ui patches on|off", "warning");
           return;
         }
-        if (value === "off") {
-          patchesVersion = undefined;
-          sharedRuntime.patchesVersion = undefined;
-          sharedRuntime.patchesActive = false;
-          syncLegacyPatchState();
-          removePrivateSections();
-          updatePatchPresentation(ctx);
-          const saved = persistSettings(ctx);
-          ctx.ui.requestRender?.();
-          ctx.ui.notify(
-            `Glance UI private patches: off · native layout active · ${saved ? "saved" : "session only"}`,
-            saved ? "info" : "warning",
-          );
-          return;
-        }
-        if (!enabled) {
-          ctx.ui.notify("Enable Glance UI before enabling private patches.", "warning");
-          return;
-        }
-        if (!SUPPORTED_PATCH_VERSIONS.has(VERSION)) {
-          ctx.ui.notify(
-            `Glance UI private patches are not available for untested Pi ${VERSION}.`,
-            "warning",
-          );
-          return;
-        }
-        if (patchesVersion === VERSION && sharedRuntime.patchesActive) {
-          ctx.ui.notify(`Glance UI private patches are already on for Pi ${VERSION}.`, "info");
-          return;
-        }
-        const confirmed = await ctx.ui.confirm(
-          "Enable private layout patches?",
-          `This applies tested in-memory prototype patches to Pi ${VERSION}. No installed files are changed. Approval expires when Pi's version changes.`,
-        );
-        if (!confirmed) {
-          ctx.ui.notify("Glance UI private patches remain off.", "info");
-          return;
-        }
-        const compatibility = await ensureLayoutPatch();
-        if (!compatibility.ok) {
-          notifyPatchFailure(ctx, compatibility);
-          return;
-        }
-        patchesVersion = VERSION;
-        sharedRuntime.patchesVersion = VERSION;
-        syncLegacyPatchState();
-        updatePatchPresentation(ctx);
-        const saved = persistSettings(ctx);
-        ctx.ui.requestRender?.();
-        ctx.ui.notify(
-          `Glance UI private patches: on for Pi ${VERSION} · ${saved ? "saved" : "session only"}`,
-          saved ? "info" : "warning",
-        );
+        await applyPatches(value === "on", ctx);
         return;
       }
 
@@ -381,13 +458,7 @@ export default function glanceUi(pi) {
           );
           return;
         }
-        workingDetailMode = value;
-        sharedRuntime.workingDetailMode = value;
-        const saved = persistSettings(ctx);
-        ctx.ui.notify(
-          `Glance UI working-detail: ${value} · ${workingDetailEffects[value]} · ${saved ? "saved" : "session only"}`,
-          saved ? "info" : "warning",
-        );
+        await applyWorkingDetail(value, ctx);
         return;
       }
 
