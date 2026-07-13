@@ -364,26 +364,37 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
       label: "user message",
       create: () => new UserMessageComponent("Spacing boundary user"),
       blankRows: 1,
+      denseBlankRows: 1,
     },
     {
       label: "tool execution",
       create: () => ({ constructor: { name: "ToolExecutionComponent" } }),
       blankRows: 1,
+      denseBlankRows: 0,
     },
     {
       label: "assistant text",
       create: () => ({ constructor: { name: "AssistantMessageComponent" } }),
       blankRows: 1,
+      denseBlankRows: 1,
     },
     {
       label: "custom artifact",
       create: () => ({ constructor: { name: "CustomMessageComponent" } }),
       blankRows: 1,
+      denseBlankRows: 1,
     },
     {
       label: "runtime notice",
       create: () => ({ constructor: { name: "RuntimeNotice" } }),
       blankRows: 1,
+      denseBlankRows: 1,
+    },
+    {
+      label: "cache notice text",
+      create: () => ({ constructor: { name: "Text" } }),
+      blankRows: 1,
+      denseBlankRows: 1,
     },
   ];
 
@@ -486,6 +497,24 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
   );
   assert.equal(leadingBlankRows(firstThinking, 80), 1, "dense cluster keeps its outer blank");
   assert.equal(leadingBlankRows(secondThinking, 80), 0, "dense tool→Thinking continuation is contiguous");
+  for (const { label, create, denseBlankRows } of boundaries) {
+    const denseThinking = new AssistantMessageComponent(
+      thinkingMessage,
+      true,
+      undefined,
+      "Thinking hidden",
+    );
+    const denseChildren = [create(), denseThinking];
+    InteractiveMode.prototype.renderSessionEntries.call({
+      chatContainer: { children: denseChildren },
+      renderSessionItems() {},
+    }, []);
+    assert.equal(
+      leadingBlankRows(denseThinking, 80),
+      denseBlankRows,
+      `dense live/replay matrix: ${label}→Thinking`,
+    );
+  }
   assert.equal(
     JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")).transcriptSpacing,
     "dense",

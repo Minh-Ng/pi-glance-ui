@@ -6,9 +6,9 @@ import { TranscriptSpacer } from "../src/ui/transcript-spacing.js";
 
 const spacer = (mode = "separated") => new TranscriptSpacer({
   isThinkingOnlyComponent: (c) => c?.type === "thinking",
-  startsWithThinkingComponent: (c) => c?.type === "thinking",
-  endsWithThinkingComponent: (c) => c?.type === "thinking",
-  isTextBearingAssistant: (c) => c?.type === "prose",
+  startsWithThinkingComponent: (c) => c?.startsThinking ?? c?.type === "thinking",
+  endsWithThinkingComponent: (c) => c?.endsThinking ?? c?.type === "thinking",
+  isTextBearingAssistant: (c) => c?.endsProse ?? c?.type === "prose",
   isToolComponent: (c) => c?.constructor?.name === "ToolExecutionComponent",
   getTranscriptSpacingMode: typeof mode === "function" ? mode : () => mode,
 });
@@ -100,6 +100,114 @@ test("mixed assistant content gets exactly one blank before every Thinking child
   assert.equal(component.contentContainer.children.length, 8, "repeated normalization never stacks");
 });
 
+test("all transcript→Thinking boundaries have the expected gap in both modes", () => {
+  const previousCases = [
+    { label: "start of transcript", create: () => undefined, dense: 1 },
+    { label: "user", create: user, dense: 1 },
+    { label: "prose assistant", create: prose, dense: 1 },
+    {
+      label: "mixed assistant ending in prose",
+      create: () => ({ endsProse: true, contentContainer: { children: [{}] } }),
+      dense: 1,
+    },
+    { label: "Thinking assistant", create: () => thinking(true), dense: 0 },
+    {
+      label: "mixed assistant ending in Thinking",
+      create: () => ({ endsThinking: true, contentContainer: { children: [{}] } }),
+      dense: 0,
+    },
+    { label: "tool", create: tool, dense: 0 },
+    { label: "custom artifact", create: () => ({ type: "custom" }), dense: 1 },
+    { label: "runtime/cache notice", create: () => ({ type: "runtime" }), dense: 1 },
+  ];
+
+  for (const mode of ["dense", "separated"]) {
+    for (const previousCase of previousCases) {
+      const current = thinking(true);
+      const previous = previousCase.create();
+      spacer(mode).normalize(previous ? [previous, current] : [current]);
+      const expected = mode === "dense" ? previousCase.dense : 1;
+      assert.equal(
+        Number(leading(current)),
+        expected,
+        `${mode}: ${previousCase.label}→Thinking`,
+      );
+      assert.ok(
+        current.contentContainer.children.filter(isSpacer).length <= 1,
+        `${mode}: ${previousCase.label}→Thinking never doubles`,
+      );
+    }
+  }
+});
+
+test("all assistant→tool boundaries add spacing only when final prose requires it", () => {
+  const previousCases = [
+    { label: "prose assistant", create: prose, expected: true },
+    {
+      label: "mixed assistant ending in prose",
+      create: () => ({ endsProse: true, contentContainer: { children: [{}] } }),
+      expected: true,
+    },
+    { label: "Thinking assistant", create: () => thinking(true), expected: false },
+    {
+      label: "mixed assistant ending in Thinking",
+      create: () => ({ endsThinking: true, contentContainer: { children: [{}] } }),
+      expected: false,
+    },
+  ];
+
+  for (const mode of ["dense", "separated"]) {
+    for (const previousCase of previousCases) {
+      const previous = previousCase.create();
+      const s = spacer(mode);
+      s.normalize([previous, tool()]);
+      assert.equal(trailing(previous), previousCase.expected, `${mode}: ${previousCase.label}→tool`);
+      s.normalize([previous, tool()]);
+      assert.equal(
+        previous.contentContainer.children.filter(isSpacer).length,
+        previousCase.expected ? 1 : Number(leading(previous)),
+        `${mode}: ${previousCase.label}→tool never doubles`,
+      );
+    }
+  }
+});
+
+test("dense cluster exits and action transitions preserve the boundary matrix", () => {
+  const clusterSources = [
+    { label: "Thinking", create: () => thinking(true) },
+    { label: "tool", create: tool },
+  ];
+  const destinations = [
+    { label: "tool", create: tool, expected: 0, standalone: false },
+    {
+      label: "prose assistant",
+      create: () => ({ type: "prose-target", contentContainer: { children: [new Spacer(1), {}] } }),
+      expected: 1,
+      standalone: false,
+    },
+    { label: "user", create: user, expected: 1, standalone: true },
+    { label: "custom artifact", create: () => ({ type: "custom" }), expected: 1, standalone: true },
+    { label: "runtime/cache notice", create: () => ({ type: "runtime" }), expected: 1, standalone: true },
+  ];
+
+  for (const sourceCase of clusterSources) {
+    for (const destination of destinations) {
+      const source = sourceCase.create();
+      const target = destination.create();
+      const children = [source, ...(destination.standalone ? [new Spacer(1)] : []), target];
+      spacer("dense").normalize(children);
+      const topLevelGap = children.slice(
+        children.indexOf(source) + 1,
+        children.indexOf(target),
+      ).filter(isSpacer).length;
+      const internalGap = target.contentContainer && leading(target) ? 1 : 0;
+      const gap = topLevelGap + internalGap;
+      assert.equal(gap, destination.expected, `${sourceCase.label}→${destination.label}`);
+      assert.ok(gap <= 1, `${sourceCase.label}→${destination.label} never doubles`);
+    }
+  }
+});
+
 test("dense mode keeps one cluster boundary and removes internal Thinking/tool gaps", () => {
   let mode = "dense";
   const s = spacer(() => mode);
@@ -116,6 +224,34 @@ test("dense mode keeps one cluster boundary and removes internal Thinking/tool g
   s.normalize(children);
   assert.equal(leading(first), true);
   assert.equal(leading(second), true, "switching modes restores separated spacing");
+});
+
+test("all intra-assistant Thinking/text transitions match the spacing matrix", () => {
+  const cases = [
+    { from: "thinking", to: "thinking", dense: 0, separated: 1 },
+    { from: "thinking", to: "text", dense: 1, separated: 1 },
+    { from: "text", to: "thinking", dense: 1, separated: 1 },
+    { from: "text", to: "text", dense: 0, separated: 0 },
+  ];
+
+  for (const mode of ["dense", "separated"]) {
+    for (const transition of cases) {
+      const from = { kind: transition.from };
+      const to = { kind: transition.to };
+      // Pi natively inserts a blank after Thinking when visible content follows.
+      const children = [from, ...(transition.from === "thinking" ? [new Spacer(1)] : []), to];
+      const component = { contentContainer: { children } };
+      spacer(mode).normalizeRenderedThinkingChildren(
+        component,
+        (child) => child?.kind === "thinking",
+      );
+      const fromIndex = children.indexOf(from);
+      const toIndex = children.indexOf(to);
+      const gap = children.slice(fromIndex + 1, toIndex).filter(isSpacer).length;
+      assert.equal(gap, transition[mode], `${mode}: ${transition.from}→${transition.to}`);
+      assert.ok(gap <= 1, `${mode}: ${transition.from}→${transition.to} never doubles`);
+    }
+  }
 });
 
 test("dense mode compacts adjacent Thinking children but preserves text boundaries", () => {
