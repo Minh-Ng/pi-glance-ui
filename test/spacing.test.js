@@ -495,6 +495,7 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
     chatContainer: { children: replayChildren },
     renderSessionItems() {},
   }, []);
+  firstThinking.setHideThinkingBlock(false);
   assert.deepEqual(replayChildren, [firstThinking, hiddenTool, secondThinking]);
   assert.notEqual(
     firstThinking.contentContainer.children.at(-1)?.constructor?.name,
@@ -641,6 +642,51 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
     leadingBlankRows(afterProseTools, 80),
     0,
     "assistant prose→hidden tools→Thinking does not add a second blank",
+  );
+
+  const hiddenThinkingChildren = [new UserMessageComponent("Hidden Thinking boundary")];
+  InteractiveMode.prototype.renderSessionEntries.call({
+    chatContainer: { children: hiddenThinkingChildren },
+    renderSessionItems(items) {
+      for (const item of items) {
+        if (item.role !== "assistant") continue;
+        hiddenThinkingChildren.push(new AssistantMessageComponent(
+          item,
+          true,
+          undefined,
+          "Thinking hidden",
+        ));
+      }
+    },
+  }, [
+    {
+      type: "message",
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "Older fully hidden thought" }],
+        stopReason: "stop",
+      },
+    },
+    {
+      type: "message",
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "Latest visible compact thought" }],
+        stopReason: "stop",
+      },
+    },
+  ]);
+  const hiddenHistoricalThinking = hiddenThinkingChildren[1];
+  const visibleCurrentThinking = hiddenThinkingChildren[2];
+  assert.equal(
+    hiddenHistoricalThinking.contentContainer.children.length,
+    0,
+    "fully hidden Thinking owns no spacer rows",
+  );
+  assert.equal(
+    leadingBlankRows(visibleCurrentThinking, 80),
+    1,
+    "hidden Thinking remains transparent to the preceding user boundary",
   );
 
   await target.commands.get("glance-ui").handler(

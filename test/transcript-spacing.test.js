@@ -6,8 +6,10 @@ import { TranscriptSpacer } from "../src/ui/transcript-spacing.js";
 
 const spacer = (mode = "separated") => new TranscriptSpacer({
   isThinkingOnlyComponent: (c) => c?.type === "thinking",
-  startsWithThinkingComponent: (c) => c?.startsThinking ?? c?.type === "thinking",
-  endsWithThinkingComponent: (c) => c?.endsThinking ?? c?.type === "thinking",
+  startsWithThinkingComponent: (c) => c?.thinkingVisible !== false
+    && (c?.startsThinking ?? c?.type === "thinking"),
+  endsWithThinkingComponent: (c) => c?.thinkingVisible !== false
+    && (c?.endsThinking ?? c?.type === "thinking"),
   isTextBearingAssistant: (c) => c?.endsProse ?? c?.type === "prose",
   isToolComponent: (c) => c?.constructor?.name === "ToolExecutionComponent",
   isTransparentComponent: (c) => c?.transparent === true,
@@ -115,7 +117,17 @@ test("all transcript→Thinking boundaries have the expected gap in both modes",
       create: () => ({ endsProse: true, contentContainer: { children: [{}] } }),
       dense: 1,
     },
-    { label: "Thinking assistant", create: () => thinking(true), dense: 0 },
+    { label: "visible Thinking assistant", create: () => thinking(true), dense: 0 },
+    {
+      label: "fully hidden Thinking assistant",
+      create: () => ({
+        type: "thinking",
+        thinkingVisible: false,
+        transparent: true,
+        contentContainer: { children: [] },
+      }),
+      dense: 1,
+    },
     {
       label: "mixed assistant ending in Thinking",
       create: () => ({ endsThinking: true, contentContainer: { children: [{}] } }),
@@ -146,6 +158,30 @@ test("all transcript→Thinking boundaries have the expected gap in both modes",
       );
     }
   }
+});
+
+test("fully hidden Thinking is transparent and never creates spacing of its own", () => {
+  const hiddenThinking = () => ({
+    type: "thinking",
+    thinkingVisible: false,
+    transparent: true,
+    contentContainer: { children: [] },
+  });
+
+  const afterUser = thinking(true);
+  const userSpacer = spacer("dense");
+  userSpacer.normalize([user(), hiddenThinking(), afterUser]);
+  userSpacer.refreshThinking(afterUser, 80);
+  assert.equal(leading(afterUser), true, "hidden Thinking does not erase a user boundary");
+
+  const firstVisible = thinking(true);
+  const hidden = hiddenThinking();
+  const secondVisible = thinking(true);
+  const clusterSpacer = spacer("dense");
+  clusterSpacer.normalize([firstVisible, hidden, secondVisible]);
+  clusterSpacer.refreshThinking(secondVisible, 80);
+  assert.equal(hidden.contentContainer.children.length, 0, "hidden Thinking renders no spacer");
+  assert.equal(leading(secondVisible), false, "hidden Thinking does not break a visible cluster");
 });
 
 test("dense mode looks through hidden tool-only continuations to the last visible boundary", () => {

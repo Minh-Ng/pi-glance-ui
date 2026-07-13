@@ -79,10 +79,16 @@ export async function patchHiddenThinkingLayout(
     );
   };
 
+  const hasRenderedThinking = (component) =>
+    component?.contentContainer?.children?.some(
+      (child) => child?.[compactThinkingRawText] !== undefined,
+    ) === true;
   const startsWithThinkingAssistant = (component) =>
-    visibleAssistantContent(component)[0]?.type === "thinking";
+    hasRenderedThinking(component)
+    && visibleAssistantContent(component)[0]?.type === "thinking";
   const endsWithThinkingAssistant = (component) =>
-    visibleAssistantContent(component).at(-1)?.type === "thinking";
+    hasRenderedThinking(component)
+    && visibleAssistantContent(component).at(-1)?.type === "thinking";
 
   // Add a prose→tool separator only when prose is the final visible block.
   // A mixed message can contain prose and then resume Thinking before its tool
@@ -95,7 +101,12 @@ export async function patchHiddenThinkingLayout(
     component?.constructor?.name === "ToolExecutionComponent";
   const isTransparentAssistant = (component) => {
     const message = component?.[originalMessage] || component?.lastMessage;
-    return message?.role === "assistant" && visibleAssistantContent(component).length === 0;
+    const renderedChildren = component?.contentContainer?.children;
+    return message?.role === "assistant"
+      && Array.isArray(renderedChildren)
+      && renderedChildren.every(
+        (child) => child instanceof Spacer || child?.constructor?.name === "Spacer",
+      );
   };
   const isVisiblyRenderedTool = (component, width) => {
     if (typeof component?.[toolHasVisibleRows] === "boolean") {
