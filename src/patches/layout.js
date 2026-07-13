@@ -6,6 +6,7 @@ import {
   formatCompactThinkingText,
   formatThinkingText,
   renderErrorText,
+  sanitizeTerminalText,
   unwrapFormattedThinkingText,
   wrapThinkingLines,
 } from "../format.js";
@@ -28,6 +29,7 @@ export async function patchHiddenThinkingLayout(
   {
     transaction = new PatchTransaction(),
     codingAgentEntryUrl = runningPiCodingAgentEntry(),
+    getTranscriptSpacingMode = () => "separated",
   } = {},
 ) {
   const baseUpdateMethod = Symbol.for("pi-compact-ui.base-update-content");
@@ -39,6 +41,7 @@ export async function patchHiddenThinkingLayout(
   const errorStateByComponent = new WeakMap();
   const thinkingStateByComponent = new WeakMap();
   const compactThinkingRawText = Symbol("compact-thinking-raw-text");
+  const toolHasVisibleRows = Symbol.for("pi-glance-ui:tool-has-visible-rows");
   let assistantGeneration = 0;
   let latestCompactThinkingComponent;
   let nextErrorSectionId = 1;
@@ -67,24 +70,70 @@ export async function patchHiddenThinkingLayout(
       );
   };
 
-  // An assistant message that carries visible prose (text), as opposed to a
-  // thinking-only block. Thinking-only blocks manage their own leading spacer.
-  const isTextBearingAssistant = (component) => {
+  const visibleAssistantContent = (component) => {
     const message = component?.[originalMessage] || component?.lastMessage;
-    return message?.role === "assistant"
-      && Array.isArray(message.content)
-      && message.content.some((item) => item.type === "text" && item.text?.trim());
+    if (message?.role !== "assistant" || !Array.isArray(message.content)) return [];
+    return message.content.filter(
+      (item) => (item.type === "text" && item.text?.trim())
+        || (item.type === "thinking" && item.thinking?.trim()),
+    );
   };
+
+  const hasRenderedThinking = (component) =>
+    component?.contentContainer?.children?.some(
+      (child) => child?.[compactThinkingRawText] !== undefined,
+    ) === true;
+  const startsWithThinkingAssistant = (component) =>
+    hasRenderedThinking(component)
+    && visibleAssistantContent(component)[0]?.type === "thinking";
+  const endsWithThinkingAssistant = (component) =>
+    hasRenderedThinking(component)
+    && visibleAssistantContent(component).at(-1)?.type === "thinking";
+
+  // Add a prose→tool separator only when prose is the final visible block.
+  // A mixed message can contain prose and then resume Thinking before its tool
+  // call; treating any earlier text as trailing prose creates a second blank
+  // alongside the next Thinking component's own leading spacer.
+  const isTextBearingAssistant = (component) =>
+    visibleAssistantContent(component).at(-1)?.type === "text";
 
   const isToolComponent = (component) =>
     component?.constructor?.name === "ToolExecutionComponent";
+  const isTransparentAssistant = (component) => {
+    const message = component?.[originalMessage] || component?.lastMessage;
+    const renderedChildren = component?.contentContainer?.children;
+    return message?.role === "assistant"
+      && Array.isArray(renderedChildren)
+      && renderedChildren.every(
+        (child) => child instanceof Spacer || child?.constructor?.name === "Spacer",
+      );
+  };
+  const isVisiblyRenderedTool = (component, width) => {
+    if (typeof component?.[toolHasVisibleRows] === "boolean") {
+      return component[toolHasVisibleRows];
+    }
+    try {
+      const lines = component?.render?.(width);
+      return Array.isArray(lines) && lines.some(
+        (line) => sanitizeTerminalText(line).replaceAll("\u2800", " ").trim().length > 0,
+      );
+    } catch {
+      // Preserve an outer blank when visibility cannot be established.
+      return false;
+    }
+  };
 
   // Thinking spacing, the prose→action separator, and their idempotent add/remove
   // bookkeeping live in one cohesive unit; see TranscriptSpacer.
   const transcriptSpacer = new TranscriptSpacer({
     isThinkingOnlyComponent,
+    startsWithThinkingComponent: startsWithThinkingAssistant,
+    endsWithThinkingComponent: endsWithThinkingAssistant,
     isTextBearingAssistant,
     isToolComponent,
+    isTransparentComponent: isTransparentAssistant,
+    isVisiblyRenderedTool,
+    getTranscriptSpacingMode,
   });
 
   const getThinkingState = (component) => {
@@ -310,6 +359,10 @@ export async function patchHiddenThinkingLayout(
             }
           }
         }
+        transcriptSpacer.normalizeRenderedThinkingChildren(
+          component,
+          (child) => child?.[compactThinkingRawText] !== undefined,
+        );
         transcriptSpacer.refreshThinking(component);
         return result;
       } finally {
@@ -333,6 +386,11 @@ export async function patchHiddenThinkingLayout(
             child.invalidate?.();
           }
         }
+        transcriptSpacer.normalizeRenderedThinkingChildren(
+          this,
+          (child) => child?.[compactThinkingRawText] !== undefined,
+        );
+        transcriptSpacer.refreshThinking(this, width);
       }
       return baseRender.call(this, width);
     };

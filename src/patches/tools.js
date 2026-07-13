@@ -1,7 +1,22 @@
-import { activityPhaseForTool, formatDuration, getToolErrorMessage, groupLabel, groupLabelColor, renderBlockHeading, summarize, toolAction, toolCategory } from "../format.js";
+import { activityPhaseForTool, formatDuration, getToolErrorMessage, groupLabel, groupLabelColor, renderBlockHeading, sanitizeTerminalText, summarize, toolAction, toolCategory } from "../format.js";
 import { RecentToolSummary } from "../timeline.js";
 
 const ORIGINAL_TOOL_DEFINITION = Symbol.for("pi-compact-ui.original-tool-definition");
+const TOOL_HAS_VISIBLE_ROWS = Symbol.for("pi-glance-ui:tool-has-visible-rows");
+
+export function removeBlankOnlyToolRows(lines) {
+  if (!Array.isArray(lines)) return lines;
+  const hasVisibleRows = lines.some(
+    (line) => sanitizeTerminalText(line).replaceAll("\u2800", " ").trim().length > 0,
+  );
+  return hasVisibleRows ? lines : [];
+}
+
+function rememberVisibleRows(component, lines) {
+  const visibleLines = removeBlankOnlyToolRows(lines);
+  component[TOOL_HAS_VISIBLE_ROWS] = visibleLines.length > 0;
+  return visibleLines;
+}
 
 export async function patchCompactToolSpacing(
   codingAgentEntryUrl,
@@ -169,7 +184,7 @@ export async function patchCompactToolSpacing(
     return baseSetExpanded.call(this, effectiveExpansion);
   };
   prototype.render = function compactToolSpacing(width) {
-    if (!isEnabled()) return renderNative(this, width);
+    if (!isEnabled()) return rememberVisibleRows(this, renderNative(this, width));
     const timelineEntry = timeline.entriesById.get(this.toolCallId);
     const workingDetailMode = getWorkingDetailMode();
     if (
@@ -183,7 +198,7 @@ export async function patchCompactToolSpacing(
         category,
         activityPhaseForTool(this.toolName, this.args),
       );
-      if (!entry.isTracked) return [];
+      if (!entry.isTracked) return rememberVisibleRows(this, []);
       entry.workingCompact = true;
       timeline.attachComponent(
         entry,
@@ -192,7 +207,7 @@ export async function patchCompactToolSpacing(
         (detailWidth) => renderExpandedDetail(this, detailWidth),
       );
       timeline.update(entry, { state: "running", theme, detail: () => [] });
-      return [];
+      return rememberVisibleRows(this, []);
     }
     const compactWorkingTool = this.expanded
       && timelineEntry?.group.expandedOverride !== true
@@ -221,7 +236,7 @@ export async function patchCompactToolSpacing(
         ? "error"
         : this.isPartial ? "warning" : groupLabelColor(category);
       const entry = timeline.register(this.toolCallId, category);
-      if (!entry.isTracked) return renderNative(this, width);
+      if (!entry.isTracked) return rememberVisibleRows(this, renderNative(this, width));
       entry.workingCompact = compactWorkingTool;
       timeline.attachComponent(
         entry,
@@ -250,7 +265,7 @@ export async function patchCompactToolSpacing(
           return lines;
         },
       });
-      return new RecentToolSummary(timeline, entry).render(width);
+      return rememberVisibleRows(this, new RecentToolSummary(timeline, entry).render(width));
     }
 
     // Expanded mode owns rich output (diffs, images, and output panels). Add
@@ -259,7 +274,7 @@ export async function patchCompactToolSpacing(
     // those rows makes later content draw over the image.
     const category = toolCategory(this.toolName, this.args);
     const entry = timeline.register(this.toolCallId, category);
-    if (!entry.isTracked) return renderNative(this, width);
+    if (!entry.isTracked) return rememberVisibleRows(this, renderNative(this, width));
     entry.workingCompact = false;
     timeline.attachComponent(
       entry,
@@ -293,6 +308,6 @@ export async function patchCompactToolSpacing(
         isExpanded: true,
       }));
     }
-    return [...prefix, ...content];
+    return rememberVisibleRows(this, [...prefix, ...content]);
   };
 }

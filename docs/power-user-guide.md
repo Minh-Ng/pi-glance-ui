@@ -40,7 +40,7 @@ Compact rows retain useful arguments such as Bash commands, file paths, edit cou
 
 Use `/sections` or `Ctrl+Shift+O` to browse and locally override sections. The narrower list leaves more room for detail, and the overlay uses 85% of terminal height. The list runs from most recent at the top to older at the bottom; narrow terminals devote the overlay to selected detail.
 
-- F cycles available section filters (All, Plan, Implement, Verify, Coordinate, Act, Thinking, and other present types).
+- Lowercase `f` cycles available section filters (All, Plan, Implement, Verify, Coordinate, Act, Thinking, and other present types).
 - Left/Right or Tab focuses the section list or detail pane.
 - Up/Down selects a section in the list or scrolls focused detail one line.
 - Page Up/Page Down scrolls detail by page; Home/End jumps to its bounds.
@@ -63,6 +63,18 @@ A later global toggle clears the relevant local override. Expanded built-in tool
 - `expanded` makes running tools follow `Ctrl+O`.
 - `hidden` omits active rows until completion.
 
+## Transcript spacing
+
+```text
+/glance-ui settings transcript-spacing dense
+/glance-ui settings transcript-spacing separated
+```
+
+- `dense` treats contiguous Thinking and action blocks as one cluster: one blank at the outer boundary and no blank rows between its internal blocks.
+- `separated` keeps one leading blank before every Thinking block. This remains the default for existing installations.
+
+The setting applies live and is persisted. It requires private patches to affect Thinking layout.
+
 ## Persistent settings
 
 Run `/glance-ui`, `/glance-ui settings`, or `/glance-ui config` to show every setting and its current value.
@@ -73,6 +85,7 @@ Run `/glance-ui`, `/glance-ui settings`, or `/glance-ui config` to show every se
 /glance-ui patches on
 /glance-ui patches off
 /glance-ui settings working-detail auto
+/glance-ui settings transcript-spacing dense
 ```
 
 The persisted file uses this shape:
@@ -81,7 +94,8 @@ The persisted file uses this shape:
 {
   "enabled": true,
   "patchesVersion": "0.80.6",
-  "workingDetailMode": "auto"
+  "workingDetailMode": "auto",
+  "transcriptSpacing": "dense"
 }
 ```
 

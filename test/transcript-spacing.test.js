@@ -4,10 +4,17 @@ import { Spacer } from "@earendil-works/pi-tui";
 
 import { TranscriptSpacer } from "../src/ui/transcript-spacing.js";
 
-const spacer = () => new TranscriptSpacer({
+const spacer = (mode = "separated") => new TranscriptSpacer({
   isThinkingOnlyComponent: (c) => c?.type === "thinking",
-  isTextBearingAssistant: (c) => c?.type === "prose",
+  startsWithThinkingComponent: (c) => c?.thinkingVisible !== false
+    && (c?.startsThinking ?? c?.type === "thinking"),
+  endsWithThinkingComponent: (c) => c?.thinkingVisible !== false
+    && (c?.endsThinking ?? c?.type === "thinking"),
+  isTextBearingAssistant: (c) => c?.endsProse ?? c?.type === "prose",
   isToolComponent: (c) => c?.constructor?.name === "ToolExecutionComponent",
+  isTransparentComponent: (c) => c?.transparent === true,
+  isVisiblyRenderedTool: (c, width) => c.render(width).some((line) => line.trim()),
+  getTranscriptSpacingMode: typeof mode === "function" ? mode : () => mode,
 });
 
 const prose = () => ({ type: "prose", contentContainer: { children: [{}] } });
@@ -15,7 +22,10 @@ const thinking = (leadingBlank = true) => ({
   type: "thinking",
   contentContainer: { children: leadingBlank ? [new Spacer(1), {}] : [{}] },
 });
-const tool = () => ({ constructor: { name: "ToolExecutionComponent" } });
+const tool = (visible = true) => ({
+  constructor: { name: "ToolExecutionComponent" },
+  render: () => visible ? ["tool"] : [],
+});
 const user = () => ({ constructor: { name: "UserMessageComponent" } });
 
 const isSpacer = (c) => c instanceof Spacer;
@@ -47,18 +57,348 @@ test("separator is removed when the successor is not a tool or is absent", () =>
   assert.equal(trailing(p), false, "removed when prose is last");
 });
 
-test("thinking-only collapses its leading blank unless it opens a turn", () => {
+test("thinking-only keeps exactly one leading blank after any visible block", () => {
   const s = spacer();
-  // After prose (not a user boundary) -> leading blank suppressed.
-  const t1 = thinking(true);
-  s.normalize([prose(), t1]);
-  assert.equal(leading(t1), false, "suppressed after non-user content");
-  // After a user message -> leading blank preserved (restored if once removed).
-  const t2 = thinking(true);
-  s.normalize([prose(), t2]);
-  assert.equal(leading(t2), false);
-  s.normalize([user(), t2]);
-  assert.equal(leading(t2), true, "restored when following a user boundary");
+  const afterProse = thinking(false);
+  s.normalize([prose(), afterProse]);
+  assert.equal(leading(afterProse), true, "repairs a missing blank after prose");
+  assert.equal(afterProse.contentContainer.children.length, 2);
+
+  const afterUser = thinking(true);
+  s.normalize([user(), afterUser]);
+  assert.equal(leading(afterUser), true, "preserves the turn-opening blank");
+  assert.equal(afterUser.contentContainer.children.length, 2);
+});
+
+test("mixed assistant content gets exactly one blank before every Thinking child", () => {
+  const s = spacer();
+  const firstThinking = {};
+  const proseChild = {};
+  const secondThinking = {};
+  const thirdThinking = {};
+  const component = {
+    contentContainer: {
+      children: [
+        firstThinking,
+        new Spacer(1),
+        proseChild,
+        secondThinking,
+        new Spacer(1),
+        new Spacer(1),
+        thirdThinking,
+      ],
+    },
+  };
+  const thinkingChildren = new Set([firstThinking, secondThinking, thirdThinking]);
+  const normalize = () => s.normalizeRenderedThinkingChildren(
+    component,
+    (child) => thinkingChildren.has(child),
+  );
+
+  normalize();
+  const normalized = component.contentContainer.children;
+  assert.equal(normalized.length, 8);
+  assert.deepEqual(
+    [normalized[1], normalized[3], normalized[5], normalized[7]],
+    [firstThinking, proseChild, secondThinking, thirdThinking],
+  );
+  assert.ok([0, 2, 4, 6].every((index) => isSpacer(normalized[index])));
+  normalize();
+  assert.equal(component.contentContainer.children.length, 8, "repeated normalization never stacks");
+});
+
+test("all transcript→Thinking boundaries have the expected gap in both modes", () => {
+  const previousCases = [
+    { label: "start of transcript", create: () => undefined, dense: 1 },
+    { label: "user", create: user, dense: 1 },
+    { label: "prose assistant", create: prose, dense: 1 },
+    {
+      label: "mixed assistant ending in prose",
+      create: () => ({ endsProse: true, contentContainer: { children: [{}] } }),
+      dense: 1,
+    },
+    { label: "visible Thinking assistant", create: () => thinking(true), dense: 0 },
+    {
+      label: "fully hidden Thinking assistant",
+      create: () => ({
+        type: "thinking",
+        thinkingVisible: false,
+        transparent: true,
+        contentContainer: { children: [] },
+      }),
+      dense: 1,
+    },
+    {
+      label: "mixed assistant ending in Thinking",
+      create: () => ({ endsThinking: true, contentContainer: { children: [{}] } }),
+      dense: 0,
+    },
+    { label: "visible tool", create: tool, dense: 0 },
+    { label: "hidden tool", create: () => tool(false), dense: 1 },
+    { label: "custom artifact", create: () => ({ type: "custom" }), dense: 1 },
+    { label: "runtime/cache notice", create: () => ({ type: "runtime" }), dense: 1 },
+  ];
+
+  for (const mode of ["dense", "separated"]) {
+    for (const previousCase of previousCases) {
+      const current = thinking(true);
+      const previous = previousCase.create();
+      const transcriptSpacer = spacer(mode);
+      transcriptSpacer.normalize(previous ? [previous, current] : [current]);
+      transcriptSpacer.refreshThinking(current, 80);
+      const expected = mode === "dense" ? previousCase.dense : 1;
+      assert.equal(
+        Number(leading(current)),
+        expected,
+        `${mode}: ${previousCase.label}→Thinking`,
+      );
+      assert.ok(
+        current.contentContainer.children.filter(isSpacer).length <= 1,
+        `${mode}: ${previousCase.label}→Thinking never doubles`,
+      );
+    }
+  }
+});
+
+test("fully hidden Thinking is transparent and never creates spacing of its own", () => {
+  const hiddenThinking = () => ({
+    type: "thinking",
+    thinkingVisible: false,
+    transparent: true,
+    contentContainer: { children: [] },
+  });
+
+  const afterUser = thinking(true);
+  const userSpacer = spacer("dense");
+  userSpacer.normalize([user(), hiddenThinking(), afterUser]);
+  userSpacer.refreshThinking(afterUser, 80);
+  assert.equal(leading(afterUser), true, "hidden Thinking does not erase a user boundary");
+
+  const firstVisible = thinking(true);
+  const hidden = hiddenThinking();
+  const secondVisible = thinking(true);
+  const clusterSpacer = spacer("dense");
+  clusterSpacer.normalize([firstVisible, hidden, secondVisible]);
+  clusterSpacer.refreshThinking(secondVisible, 80);
+  assert.equal(hidden.contentContainer.children.length, 0, "hidden Thinking renders no spacer");
+  assert.equal(leading(secondVisible), false, "hidden Thinking does not break a visible cluster");
+});
+
+test("dense mode looks through hidden tool-only continuations to the last visible boundary", () => {
+  const hiddenChain = () => [
+    { transparent: true },
+    tool(false),
+    { transparent: true },
+    tool(false),
+  ];
+
+  const afterUser = thinking(true);
+  const userSpacer = spacer("dense");
+  userSpacer.normalize([user(), ...hiddenChain(), afterUser]);
+  userSpacer.refreshThinking(afterUser, 80);
+  assert.equal(leading(afterUser), true, "hidden tools after a user do not erase the outer blank");
+
+  const afterThinking = thinking(true);
+  const thinkingSpacer = spacer("dense");
+  thinkingSpacer.normalize([thinking(true), ...hiddenChain(), afterThinking]);
+  thinkingSpacer.refreshThinking(afterThinking, 80);
+  assert.equal(leading(afterThinking), false, "hidden tools inside a Thinking cluster remain contiguous");
+
+  const finalProse = prose();
+  const afterProseTools = thinking(true);
+  const proseSpacer = spacer("dense");
+  proseSpacer.normalize([finalProse, tool(false), ...hiddenChain(), afterProseTools]);
+  proseSpacer.refreshThinking(afterProseTools, 80);
+  assert.equal(trailing(finalProse), true, "final prose supplies the cluster's outer blank");
+  assert.equal(
+    leading(afterProseTools),
+    false,
+    "prose separator plus hidden tools must not add a second blank before Thinking",
+  );
+
+  const separatedProse = prose();
+  const separatedThinking = thinking(true);
+  const separatedSpacer = spacer("separated");
+  separatedSpacer.normalize([
+    separatedProse,
+    tool(false),
+    ...hiddenChain(),
+    separatedThinking,
+  ]);
+  separatedSpacer.refreshThinking(separatedThinking, 80);
+  assert.equal(trailing(separatedProse), true);
+  assert.equal(
+    leading(separatedThinking),
+    false,
+    "separated mode also deduplicates an already-owned prose boundary",
+  );
+});
+
+test("all assistant→tool boundaries add spacing only when final prose requires it", () => {
+  const previousCases = [
+    { label: "prose assistant", create: prose, expected: true },
+    {
+      label: "mixed assistant ending in prose",
+      create: () => ({ endsProse: true, contentContainer: { children: [{}] } }),
+      expected: true,
+    },
+    { label: "Thinking assistant", create: () => thinking(true), expected: false },
+    {
+      label: "mixed assistant ending in Thinking",
+      create: () => ({ endsThinking: true, contentContainer: { children: [{}] } }),
+      expected: false,
+    },
+  ];
+
+  for (const mode of ["dense", "separated"]) {
+    for (const previousCase of previousCases) {
+      const previous = previousCase.create();
+      const s = spacer(mode);
+      s.normalize([previous, tool()]);
+      assert.equal(trailing(previous), previousCase.expected, `${mode}: ${previousCase.label}→tool`);
+      s.normalize([previous, tool()]);
+      assert.equal(
+        previous.contentContainer.children.filter(isSpacer).length,
+        previousCase.expected ? 1 : Number(leading(previous)),
+        `${mode}: ${previousCase.label}→tool never doubles`,
+      );
+    }
+  }
+});
+
+test("dense cluster exits and action transitions preserve the boundary matrix", () => {
+  const clusterSources = [
+    { label: "Thinking", create: () => thinking(true) },
+    { label: "tool", create: tool },
+  ];
+  const destinations = [
+    { label: "tool", create: tool, expected: 0, standalone: false },
+    {
+      label: "prose assistant",
+      create: () => ({ type: "prose-target", contentContainer: { children: [new Spacer(1), {}] } }),
+      expected: 1,
+      standalone: false,
+    },
+    { label: "user", create: user, expected: 1, standalone: true },
+    { label: "custom artifact", create: () => ({ type: "custom" }), expected: 1, standalone: true },
+    { label: "runtime/cache notice", create: () => ({ type: "runtime" }), expected: 1, standalone: true },
+  ];
+
+  for (const sourceCase of clusterSources) {
+    for (const destination of destinations) {
+      const source = sourceCase.create();
+      const target = destination.create();
+      const children = [source, ...(destination.standalone ? [new Spacer(1)] : []), target];
+      spacer("dense").normalize(children);
+      const topLevelGap = children.slice(
+        children.indexOf(source) + 1,
+        children.indexOf(target),
+      ).filter(isSpacer).length;
+      const internalGap = target.contentContainer && leading(target) ? 1 : 0;
+      const gap = topLevelGap + internalGap;
+      assert.equal(gap, destination.expected, `${sourceCase.label}→${destination.label}`);
+      assert.ok(gap <= 1, `${sourceCase.label}→${destination.label} never doubles`);
+    }
+  }
+});
+
+test("dense mode keeps one cluster boundary and removes internal Thinking/tool gaps", () => {
+  let mode = "dense";
+  const s = spacer(() => mode);
+  const first = thinking(true);
+  const second = thinking(true);
+  const hiddenTool = tool(false);
+  const children = [user(), first, hiddenTool, second];
+
+  s.normalize(children);
+  assert.equal(leading(first), true, "cluster starts with one outer blank");
+  assert.equal(leading(second), false, "tool→Thinking continuation has no internal blank");
+
+  mode = "separated";
+  s.normalize(children);
+  assert.equal(leading(first), true);
+  assert.equal(leading(second), true, "switching modes restores separated spacing");
+});
+
+test("all intra-assistant Thinking/text transitions match the spacing matrix", () => {
+  const cases = [
+    { from: "thinking", to: "thinking", dense: 0, separated: 1 },
+    { from: "thinking", to: "text", dense: 1, separated: 1 },
+    { from: "text", to: "thinking", dense: 1, separated: 1 },
+    { from: "text", to: "text", dense: 0, separated: 0 },
+  ];
+
+  for (const mode of ["dense", "separated"]) {
+    for (const transition of cases) {
+      const from = { kind: transition.from };
+      const to = { kind: transition.to };
+      // Pi natively inserts a blank after Thinking when visible content follows.
+      const children = [from, ...(transition.from === "thinking" ? [new Spacer(1)] : []), to];
+      const component = { contentContainer: { children } };
+      spacer(mode).normalizeRenderedThinkingChildren(
+        component,
+        (child) => child?.kind === "thinking",
+      );
+      const fromIndex = children.indexOf(from);
+      const toIndex = children.indexOf(to);
+      const gap = children.slice(fromIndex + 1, toIndex).filter(isSpacer).length;
+      assert.equal(gap, transition[mode], `${mode}: ${transition.from}→${transition.to}`);
+      assert.ok(gap <= 1, `${mode}: ${transition.from}→${transition.to} never doubles`);
+    }
+  }
+});
+
+test("dense mode compacts adjacent Thinking children but preserves text boundaries", () => {
+  const s = spacer("dense");
+  const firstThinking = {};
+  const secondThinking = {};
+  const proseChild = {};
+  const thirdThinking = {};
+  const component = {
+    contentContainer: {
+      children: [
+        firstThinking,
+        new Spacer(1),
+        secondThinking,
+        new Spacer(1),
+        proseChild,
+        thirdThinking,
+      ],
+    },
+  };
+  const thinkingChildren = new Set([firstThinking, secondThinking, thirdThinking]);
+  s.normalizeRenderedThinkingChildren(component, (child) => thinkingChildren.has(child));
+
+  const normalized = component.contentContainer.children;
+  assert.deepEqual(
+    normalized.filter((child) => !isSpacer(child)),
+    [firstThinking, secondThinking, proseChild, thirdThinking],
+  );
+  assert.equal(normalized[0].constructor.name, "Spacer", "one blank above cluster");
+  assert.equal(normalized[2], secondThinking, "no blank between adjacent Thinking blocks");
+  assert.equal(normalized[3].constructor.name, "Spacer", "one blank below cluster before prose");
+  assert.equal(normalized[5].constructor.name, "Spacer", "text starts a new Thinking cluster");
+  assert.equal(normalized.length, 7);
+});
+
+test("thinking removes duplicate transcript spacers but keeps its internal blank", () => {
+  const s = spacer();
+  const first = thinking(true);
+  const second = thinking(true);
+  const children = [first, new Spacer(1), new Spacer(1), second];
+
+  s.normalize(children);
+  assert.deepEqual(children, [first, second], "transcript-level duplicate rows are removed");
+  assert.equal(leading(first), true);
+  assert.equal(leading(second), true);
+  s.normalize(children);
+  assert.deepEqual(children, [first, second], "re-normalizing is idempotent");
+  assert.equal(second.contentContainer.children.length, 2, "internal blank never stacks");
+
+  children.splice(1, 0, new Spacer(1)); // native replay reintroduces a boundary row
+  spacer().normalize(children); // fresh /reload generation
+  assert.deepEqual(children, [first, second], "fresh generation removes the duplicate again");
+  assert.equal(second.contentContainer.children.length, 2, "reload still leaves exactly one blank");
 });
 
 test("spacers between entries are ignored when computing adjacency", () => {
@@ -92,10 +432,12 @@ test("a new generation removes a separator added by a prior generation", () => {
   assert.equal(trailing(p), false, "stale separator from prior generation must be removed");
 });
 
-test("thinking suppression state survives the generation handoff", () => {
-  const t = thinking(true);
+test("thinking spacing survives the generation handoff without stacking", () => {
+  const t = thinking(false);
   spacer().normalize([prose(), t]);
-  assert.equal(leading(t), false);
+  assert.equal(leading(t), true);
+  assert.equal(t.contentContainer.children.length, 2);
   spacer().normalize([user(), t]);
-  assert.equal(leading(t), true, "new generation must restore a blank the old one suppressed");
+  assert.equal(leading(t), true);
+  assert.equal(t.contentContainer.children.length, 2, "new generation must not stack a blank");
 });

@@ -1,11 +1,12 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { stripVTControlCharacters } from "node:util";
 
 import glanceUi from "../src/index.js";
+import { removeBlankOnlyToolRows } from "../src/patches/tools.js";
 
 function harness() {
   const handlers = new Map();
@@ -50,6 +51,21 @@ function leadingBlankRows(component, width) {
   }
   return count;
 }
+
+function trailingBlankRows(component, width) {
+  let count = 0;
+  for (const line of component.render(width).toReversed()) {
+    if (stripVTControlCharacters(line).trim() !== "") break;
+    count += 1;
+  }
+  return count;
+}
+
+test("blank-only hidden tool renders cannot add transcript spacing", () => {
+  assert.deepEqual(removeBlankOnlyToolRows(["", "   ", "\u2800"]), []);
+  const visible = ["", "Tool output", ""];
+  assert.strictEqual(removeBlankOnlyToolRows(visible), visible);
+});
 
 test("a text-bearing message gains one blank line before a following action group, removed otherwise", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-sep-"));
@@ -116,7 +132,7 @@ test("a text-bearing message gains one blank line before a following action grou
   assert.equal(trailingSpacers(prose), 0, "separator removed when the message is last");
 });
 
-test("only thinking-only blocks collapse leading spacing; text-bearing messages match native", async (t) => {
+test("compact assistant rendering preserves native text-bearing spacing", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-parity-"));
   const previousConfig = process.env.PI_GLANCE_UI_CONFIG;
   process.env.PI_GLANCE_UI_CONFIG = join(directory, "glance-ui.json");
@@ -169,6 +185,45 @@ test("only thinking-only blocks collapse leading spacing; text-bearing messages 
   );
   const glanceRows = measure(glanceComponents);
 
+  const mixedMessage = {
+    role: "assistant",
+    content: [
+      { type: "thinking", thinking: "Thought before prose" },
+      { type: "text", text: "Visible prose boundary" },
+      { type: "thinking", thinking: "Thought after prose" },
+    ],
+    stopReason: "stop",
+  };
+  const mixed = new AssistantMessageComponent(
+    mixedMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  mixed.setHideThinkingBlock(false);
+  const assertMixedSpacing = () => {
+    const children = mixed.contentContainer.children;
+    const thinkingIndexes = children
+      .map((child, index) => child?.defaultTextStyle?.italic === true ? index : -1)
+      .filter((index) => index >= 0);
+    assert.equal(thinkingIndexes.length, 2);
+    for (const index of thinkingIndexes) {
+      assert.equal(
+        children[index - 1]?.constructor?.name,
+        "Spacer",
+        "every rendered Thinking child has a blank before it",
+      );
+      assert.notEqual(
+        children[index - 2]?.constructor?.name,
+        "Spacer",
+        "rendered Thinking never has two blanks before it",
+      );
+    }
+  };
+  assertMixedSpacing();
+  mixed.updateContent(mixedMessage);
+  assertMixedSpacing();
+
   // Toggle glance off in-process to capture the true native baseline; the
   // render path re-runs updateContent when the enabled state changes.
   const command = target.commands.get("glance-ui").handler;
@@ -185,14 +240,16 @@ test("only thinking-only blocks collapse leading spacing; text-bearing messages 
     "thinking+text must match native leading spacing");
   assert.deepEqual(glanceRows.textOnly, nativeRows.textOnly,
     "text-only must match native leading spacing");
-  // The only intentional divergence: thinking-only blocks collapse their blank.
+  // Before chat-level transcript normalization, compact Thinking rendering may
+  // use fewer rows than native. The boundary test below enforces exactly one
+  // visible blank once the component is attached to the transcript.
   assert.ok(
     glanceRows.thinkingOnly.every((n, i) => n <= nativeRows.thinkingOnly[i]),
     "thinking-only must not add blank rows vs native",
   );
   assert.ok(
     glanceRows.thinkingOnly.some((n, i) => n < nativeRows.thinkingOnly[i]),
-    "thinking-only should collapse at least one native blank row",
+    "compact Thinking should use fewer rows before transcript normalization",
   );
 });
 
@@ -270,7 +327,7 @@ test("live: prose→action separator lands in the same frame the tool row stream
   );
 });
 
-test("Thinking spacing follows transcript boundaries live and after reconstruction", async (t) => {
+test("Thinking keeps exactly one blank across transcript boundaries live and after reconstruction", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-spacing-"));
   const previousConfig = process.env.PI_GLANCE_UI_CONFIG;
   process.env.PI_GLANCE_UI_CONFIG = join(directory, "glance-ui.json");
@@ -323,26 +380,49 @@ test("Thinking spacing follows transcript boundaries live and after reconstructi
       label: "user message",
       create: () => new UserMessageComponent("Spacing boundary user"),
       blankRows: 1,
+      denseBlankRows: 1,
     },
     {
-      label: "tool execution",
-      create: () => ({ constructor: { name: "ToolExecutionComponent" } }),
-      blankRows: 0,
+      label: "visible tool execution",
+      create: () => ({
+        constructor: { name: "ToolExecutionComponent" },
+        render: () => ["tool"],
+      }),
+      blankRows: 1,
+      denseBlankRows: 0,
+    },
+    {
+      label: "hidden tool execution",
+      create: () => ({
+        constructor: { name: "ToolExecutionComponent" },
+        render: () => [],
+      }),
+      blankRows: 1,
+      denseBlankRows: 1,
     },
     {
       label: "assistant text",
       create: () => ({ constructor: { name: "AssistantMessageComponent" } }),
-      blankRows: 0,
+      blankRows: 1,
+      denseBlankRows: 1,
     },
     {
       label: "custom artifact",
       create: () => ({ constructor: { name: "CustomMessageComponent" } }),
-      blankRows: 0,
+      blankRows: 1,
+      denseBlankRows: 1,
     },
     {
       label: "runtime notice",
       create: () => ({ constructor: { name: "RuntimeNotice" } }),
-      blankRows: 0,
+      blankRows: 1,
+      denseBlankRows: 1,
+    },
+    {
+      label: "cache notice text",
+      create: () => ({ constructor: { name: "Text" } }),
+      blankRows: 1,
+      denseBlankRows: 1,
     },
   ];
 
@@ -399,4 +479,264 @@ test("Thinking spacing follows transcript boundaries live and after reconstructi
       );
     }
   }
+
+  // Real session pattern: Thinking+toolCall, compact/hidden tool component,
+  // then the next Thinking continuation. Standalone transcript spacers around
+  // the zero-row tool must not combine with the latter component's own blank.
+  const mixedEndingThinkingMessage = {
+    role: "assistant",
+    content: [
+      { type: "thinking", thinking: "Thought before visible prose" },
+      { type: "text", text: "Visible prose inside the assistant continuation" },
+      { type: "thinking", thinking: "Final thought before the tool call" },
+      { type: "toolCall", id: "mixed-boundary-tool", name: "TaskCreate", arguments: {} },
+    ],
+    stopReason: "toolUse",
+  };
+  const firstThinking = new AssistantMessageComponent(
+    mixedEndingThinkingMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const secondThinking = new AssistantMessageComponent(
+    thinkingMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const hiddenTool = { constructor: { name: "ToolExecutionComponent" } };
+  const replayChildren = [firstThinking, hiddenTool, secondThinking];
+  InteractiveMode.prototype.renderSessionEntries.call({
+    chatContainer: { children: replayChildren },
+    renderSessionItems() {},
+  }, []);
+  firstThinking.setHideThinkingBlock(false);
+  assert.deepEqual(replayChildren, [firstThinking, hiddenTool, secondThinking]);
+  assert.notEqual(
+    firstThinking.contentContainer.children.at(-1)?.constructor?.name,
+    "Spacer",
+    "earlier prose must not add a trailing blank when the message ends in Thinking",
+  );
+  assert.equal(leadingBlankRows(secondThinking, 80), 1);
+
+  await target.commands.get("glance-ui").handler(
+    "settings transcript-spacing dense",
+    target.ctx,
+  );
+  assert.equal(leadingBlankRows(firstThinking, 80), 1, "dense cluster keeps its outer blank");
+  assert.equal(leadingBlankRows(secondThinking, 80), 0, "dense tool→Thinking continuation is contiguous");
+  for (const { label, create, denseBlankRows } of boundaries) {
+    const denseThinking = new AssistantMessageComponent(
+      thinkingMessage,
+      true,
+      undefined,
+      "Thinking hidden",
+    );
+    const denseChildren = [create(), denseThinking];
+    InteractiveMode.prototype.renderSessionEntries.call({
+      chatContainer: { children: denseChildren },
+      renderSessionItems() {},
+    }, []);
+    assert.equal(
+      leadingBlankRows(denseThinking, 80),
+      denseBlankRows,
+      `dense live/replay matrix: ${label}→Thinking`,
+    );
+  }
+  assert.equal(
+    JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")).transcriptSpacing,
+    "dense",
+  );
+
+  // Actual streaming order starts with an empty assistant message; Thinking
+  // arrives on a later update. This must still honor the user→cluster boundary.
+  const streamingChildren = [new UserMessageComponent("Live dense boundary")];
+  const streamingMode = {
+    isInitialized: true,
+    footer: { invalidate() {} },
+    hideThinkingBlock: true,
+    hiddenThinkingLabel: "Thinking hidden",
+    outputPad: 1,
+    pendingTools: new Map(),
+    getMarkdownThemeWithSettings: () => undefined,
+    chatContainer: {
+      children: streamingChildren,
+      addChild(component) { this.children.push(component); },
+    },
+    ui: { requestRender() {} },
+  };
+  await InteractiveMode.prototype.handleEvent.call(streamingMode, {
+    type: "message_start",
+    message: { role: "assistant", content: [], stopReason: "stop" },
+  });
+  await InteractiveMode.prototype.handleEvent.call(streamingMode, {
+    type: "message_update",
+    message: thinkingMessage,
+  });
+  assert.equal(
+    leadingBlankRows(streamingMode.streamingComponent, 80),
+    1,
+    "dense live user→Thinking stream keeps one outer blank",
+  );
+
+  // Persisted sessions can place tool-only assistant/components between the
+  // user and the first visible Thinking. Hidden tools must remain transparent.
+  const toolOnlyMessage = {
+    role: "assistant",
+    content: [{ type: "toolCall", id: "hidden-tool", name: "TaskList", arguments: {} }],
+    stopReason: "toolUse",
+  };
+  const toolOnlyAssistant = new AssistantMessageComponent(
+    toolOnlyMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const hiddenReplayTool = {
+    constructor: { name: "ToolExecutionComponent" },
+    render: () => [],
+  };
+  const afterHiddenTools = new AssistantMessageComponent(
+    thinkingMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const hiddenReplayChildren = [
+    new UserMessageComponent("Persisted dense boundary"),
+    toolOnlyAssistant,
+    hiddenReplayTool,
+    afterHiddenTools,
+  ];
+  InteractiveMode.prototype.renderSessionEntries.call({
+    chatContainer: { children: hiddenReplayChildren },
+    renderSessionItems() {},
+  }, []);
+  assert.equal(
+    leadingBlankRows(afterHiddenTools, 80),
+    1,
+    "dense replay user→hidden tools→Thinking keeps one outer blank",
+  );
+
+  const finalProseWithTool = new AssistantMessageComponent(
+    {
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          text: "Assistant output before hidden actions.\n\nA second prose paragraph before Thinking.",
+        },
+        { type: "toolCall", id: "prose-tool", name: "TaskUpdate", arguments: {} },
+      ],
+      stopReason: "toolUse",
+    },
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const afterProseTools = new AssistantMessageComponent(
+    thinkingMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const proseReplayChildren = [
+    finalProseWithTool,
+    {
+      constructor: { name: "ToolExecutionComponent" },
+      render: () => removeBlankOnlyToolRows(["", "\u2800"]),
+    },
+    toolOnlyAssistant,
+    hiddenReplayTool,
+    afterProseTools,
+  ];
+  InteractiveMode.prototype.renderSessionEntries.call({
+    chatContainer: { children: proseReplayChildren },
+    renderSessionItems() {},
+  }, []);
+  assert.equal(
+    finalProseWithTool.contentContainer.children.at(-1)?.constructor?.name,
+    "Spacer",
+    "final assistant prose supplies one outer cluster blank",
+  );
+  assert.equal(
+    leadingBlankRows(afterProseTools, 80),
+    0,
+    "assistant prose→hidden tools→Thinking does not add a second blank",
+  );
+  const intermediateBlankRows = proseReplayChildren.slice(1, -1)
+    .flatMap((component) => component.render?.(80) ?? [])
+    .filter((line) => stripVTControlCharacters(line).trim() === "")
+    .length;
+  assert.equal(
+    trailingBlankRows(finalProseWithTool, 80)
+      + intermediateBlankRows
+      + leadingBlankRows(afterProseTools, 80),
+    1,
+    "multi-paragraph prose→hidden tools→Thinking has one total rendered blank",
+  );
+
+  const hiddenThinkingChildren = [new UserMessageComponent("Hidden Thinking boundary")];
+  InteractiveMode.prototype.renderSessionEntries.call({
+    chatContainer: { children: hiddenThinkingChildren },
+    renderSessionItems(items) {
+      for (const item of items) {
+        if (item.role !== "assistant") continue;
+        hiddenThinkingChildren.push(new AssistantMessageComponent(
+          item,
+          true,
+          undefined,
+          "Thinking hidden",
+        ));
+      }
+    },
+  }, [
+    {
+      type: "message",
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "Older fully hidden thought" }],
+        stopReason: "stop",
+      },
+    },
+    {
+      type: "message",
+      message: {
+        role: "assistant",
+        content: [{ type: "thinking", thinking: "Latest visible compact thought" }],
+        stopReason: "stop",
+      },
+    },
+  ]);
+  const hiddenHistoricalThinking = hiddenThinkingChildren[1];
+  const visibleCurrentThinking = hiddenThinkingChildren[2];
+  assert.equal(
+    hiddenHistoricalThinking.contentContainer.children.length,
+    0,
+    "fully hidden Thinking owns no spacer rows",
+  );
+  assert.equal(
+    leadingBlankRows(visibleCurrentThinking, 80),
+    1,
+    "hidden Thinking remains transparent to the preceding user boundary",
+  );
+
+  await target.commands.get("glance-ui").handler(
+    "settings transcript-spacing separated",
+    target.ctx,
+  );
+  assert.equal(leadingBlankRows(secondThinking, 80), 1, "separated mode restores the blank after a visible tool");
+  assert.equal(
+    leadingBlankRows(afterProseTools, 80),
+    0,
+    "separated mode deduplicates prose spacing through hidden tools",
+  );
+  assert.equal(
+    trailingBlankRows(finalProseWithTool, 80)
+      + intermediateBlankRows
+      + leadingBlankRows(afterProseTools, 80),
+    1,
+    "separated multi-paragraph prose→hidden tools→Thinking has one total blank",
+  );
 });

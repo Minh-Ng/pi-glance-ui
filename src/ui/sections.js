@@ -255,10 +255,10 @@ export class SectionNavigator {
     const arrow = selected?.isExpanded() ? "▾" : "▸";
     const activeFilter = this.availableFilters[this.filterIndex];
     const filterLabel = FILTER_LABELS[activeFilter] ?? activeFilter;
-    const sectionCounts = `${filterLabel} · ${this.sections.length}/${this.allSections.length}`;
+    const sectionCounts = `Filter: ${filterLabel} · ${this.sections.length}/${this.allSections.length}`;
     const footer = this.theme.fg(
       "dim",
-      "F filter · ←/→ or Tab pane · ↑↓ select/scroll · PgUp/PgDn detail · Enter toggle · Esc close",
+      "  f: cycle filter   ·   ←/→/Tab: pane   ·   ↑/↓: select/scroll   ·   PgUp/PgDn: detail   ·   Enter: toggle   ·   Esc: close",
     );
 
     if (renderWidth < 100) {
@@ -291,7 +291,7 @@ export class SectionNavigator {
       ? this.theme.fg("accent", this.theme.bold(`› ${label}`))
       : this.theme.fg("dim", `  ${label}`);
     const leftHeader = paneHeader(
-      `Sections · ${sectionCounts}`,
+      sectionCounts,
       this.focusedPane === "sections",
     );
     const rightHeader = paneHeader(

@@ -39,6 +39,7 @@ export function rebuildActionSections({ timeline, sectionController, sessionMana
 const SHARED_RUNTIME_STATE = Symbol.for("pi-compact-ui.shared-runtime-state");
 const SUPPORTED_PATCH_VERSIONS = new Set(["0.80.6"]);
 const WORKING_DETAIL_MODES = new Set(["auto", "compact", "expanded", "hidden"]);
+const TRANSCRIPT_SPACING_MODES = new Set(["dense", "separated"]);
 
 function requiresFreshContainer(current, fallback) {
   if (fallback instanceof Map) return !(current instanceof Map);
@@ -117,6 +118,9 @@ export default function glanceUi(pi) {
   let workingDetailMode = persistedConfig.workingDetailMode
     ?? sharedRuntime.workingDetailMode
     ?? "auto";
+  let transcriptSpacing = persistedConfig.transcriptSpacing
+    ?? sharedRuntime.transcriptSpacing
+    ?? "separated";
   let lastSectionRecovery;
   // Session replacement loads the next extension generation before Pi replays
   // the selected transcript, then emits session_start afterward. Keep already
@@ -130,6 +134,7 @@ export default function glanceUi(pi) {
   sharedRuntime.patchesVersion = patchesVersion;
   sharedRuntime.patchesActive = inheritedPatchesActive;
   sharedRuntime.workingDetailMode = workingDetailMode;
+  sharedRuntime.transcriptSpacing = transcriptSpacing;
   // Wrappers from builds predating explicit consent consult this legacy slot.
   sharedRuntime.enabled = inheritedPatchesActive;
   let layoutPatch;
@@ -158,12 +163,17 @@ export default function glanceUi(pi) {
     enabled,
     ...(patchesVersion ? { patchesVersion } : {}),
     workingDetailMode,
+    transcriptSpacing,
   });
   const workingDetailEffects = {
     auto: "only the bottom-most running tool stays compact",
     compact: "running tools stay compact",
     expanded: "running tools follow Ctrl+O",
     hidden: "running tools appear when they finish",
+  };
+  const transcriptSpacingEffects = {
+    dense: "Thinking and action clusters have only outer spacing",
+    separated: "every Thinking block has a leading blank",
   };
   const patchStatus = () => patchesVersion === runningPiVersion() && sharedRuntime.patchesActive
     ? `on for Pi ${runningPiVersion()}`
@@ -175,6 +185,7 @@ export default function glanceUi(pi) {
     `enabled: ${enabled ? "on" : "off"} (on|off) — ${enabled ? "compact tool rendering is active" : "native Pi rendering is active"}`,
     `patches: ${patchStatus()} (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer`,
     `working-detail: ${workingDetailMode} (auto|compact|expanded|hidden) — ${workingDetailEffects[workingDetailMode]}`,
+    `transcript-spacing: ${transcriptSpacing} (dense|separated) — ${transcriptSpacingEffects[transcriptSpacing]}`,
     ...(lastSectionRecovery
       ? [`sections: ${lastSectionRecovery.actionSections} action groups from ${lastSectionRecovery.toolCalls} calls${lastSectionRecovery.error ? ` — ${lastSectionRecovery.error}` : ""}`]
       : []),
@@ -263,7 +274,10 @@ export default function glanceUi(pi) {
           sectionController,
           isPatchEnabled,
           () => workingDetailMode,
-          { codingAgentEntryUrl: runtime.entryUrl },
+          {
+            codingAgentEntryUrl: runtime.entryUrl,
+            getTranscriptSpacingMode: () => sharedRuntime.transcriptSpacing ?? transcriptSpacing,
+          },
         );
       })();
     }
@@ -297,6 +311,7 @@ export default function glanceUi(pi) {
       persistedConfig.enabled !== enabled
       || persistedConfig.patchesVersion !== patchesVersion
       || persistedConfig.workingDetailMode !== workingDetailMode
+      || persistedConfig.transcriptSpacing !== transcriptSpacing
     ) {
       persistSettings(ctx);
     }
@@ -445,10 +460,22 @@ export default function glanceUi(pi) {
     );
   };
 
+  const applyTranscriptSpacing = async (value, ctx) => {
+    transcriptSpacing = value;
+    sharedRuntime.transcriptSpacing = value;
+    const saved = persistSettings(ctx);
+    ctx.ui.requestRender?.();
+    ctx.ui.notify(
+      `Glance UI transcript-spacing: ${value} · ${transcriptSpacingEffects[value]} · ${saved ? "saved" : "session only"}`,
+      saved ? "info" : "warning",
+    );
+  };
+
   const applySettingByKey = (key, value, ctx) => {
     if (key === "enabled") return applyEnabled(value === "on", ctx);
     if (key === "patches") return applyPatches(value === "on", ctx);
     if (key === "working-detail") return applyWorkingDetail(value, ctx);
+    if (key === "transcript-spacing") return applyTranscriptSpacing(value, ctx);
     return undefined;
   };
 
@@ -473,6 +500,13 @@ export default function glanceUi(pi) {
       value: workingDetailMode,
       values: [...WORKING_DETAIL_MODES],
       effect: workingDetailEffects[workingDetailMode],
+    },
+    {
+      key: "transcript-spacing",
+      label: "transcript-spacing",
+      value: transcriptSpacing,
+      values: [...TRANSCRIPT_SPACING_MODES],
+      effect: transcriptSpacingEffects[transcriptSpacing],
     },
   ];
 
@@ -548,6 +582,18 @@ export default function glanceUi(pi) {
           return;
         }
         await applyWorkingDetail(value, ctx);
+        return;
+      }
+
+      if (setting === "transcript-spacing") {
+        if (tokens.length !== 2 || !TRANSCRIPT_SPACING_MODES.has(value)) {
+          ctx.ui.notify(
+            "Usage: /glance-ui settings transcript-spacing dense|separated",
+            "warning",
+          );
+          return;
+        }
+        await applyTranscriptSpacing(value, ctx);
         return;
       }
 
