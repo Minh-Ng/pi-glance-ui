@@ -101,7 +101,7 @@ export default function glanceUi(pi) {
   const settingsSummary = () => [
     "Glance UI settings",
     `enabled: ${enabled ? "on" : "off"} (on|off) — ${enabled ? "compact tool rendering is active" : "native Pi rendering is active"}`,
-    `patches: ${patchStatus()} (on|off) — optional native transcript layout patches`,
+    `patches: ${patchStatus()} (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer`,
     `working-detail: ${workingDetailMode} (auto|compact|expanded|hidden) — ${workingDetailEffects[workingDetailMode]}`,
     "Change: /glance-ui settings <name> <value>",
     "Sections: /sections or Ctrl+Shift+O",
@@ -142,8 +142,8 @@ export default function glanceUi(pi) {
     }), {
       overlay: true,
       overlayOptions: {
-        width: "60%",
-        maxHeight: "70%",
+        width: "90%",
+        maxHeight: "80%",
         anchor: "center",
         margin: 1,
       },
@@ -377,7 +377,7 @@ export default function glanceUi(pi) {
       label: "patches",
       value: patchesVersion === VERSION && sharedRuntime.patchesActive ? "on" : "off",
       values: ["on", "off"],
-      effect: `optional native transcript layout patches (${patchStatus()})`,
+      effect: `required for the full viewer and transcript presentation (${patchStatus()})`,
     },
     {
       key: "working-detail",

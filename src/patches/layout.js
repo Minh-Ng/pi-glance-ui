@@ -1,6 +1,6 @@
 import { realpathSync } from "node:fs";
 import { pathToFileURL } from "node:url";
-import { Spacer, Text } from "@earendil-works/pi-tui";
+import { Spacer, Text, truncateToWidth } from "@earendil-works/pi-tui";
 import { compactWhitespace, compatibilityError, errorTitle, formatThinkingText, renderErrorText, unwrapFormattedThinkingText, wrapThinkingLines } from "../format.js";
 import { patchCompactCustomMessages } from "./custom-messages.js";
 import { patchCompactFooter, patchCompactUserMessages } from "./chrome.js";
@@ -208,6 +208,12 @@ export async function patchHiddenThinkingLayout(
         kind: "thinking",
         label: `Thinking · ${compactThinkingByIndex.size} step${compactThinkingByIndex.size === 1 ? "" : "s"}${sectionSummary ? ` · ${sectionSummary}` : ""}`,
         isExpanded: () => thinkingState.expansionOverride ?? !component.hideThinkingBlock,
+        renderDetail: (width) => source.content
+          .filter((item) => item.type === "thinking")
+          .flatMap((item) => {
+            const thinking = formatThinkingText(item.thinking, true);
+            return thinking ? wrapThinkingLines(thinking, width).split("\n") : [];
+          }),
         toggle: () => {
           const isExpanded = thinkingState.expansionOverride ?? !component.hideThinkingBlock;
           thinkingState.expansionOverride = !isExpanded;
@@ -257,6 +263,14 @@ export async function patchHiddenThinkingLayout(
           kind: "assistantError",
           label: `Error · ${errorTitle(failureMessage)}`,
           isExpanded: () => assistantErrorState.isExpanded,
+          renderDetail: (width) => renderErrorText(
+            theme,
+            "error",
+            failureMessage,
+            true,
+          ).split("\n").map(
+            (line) => truncateToWidth(line, Math.max(1, width), "…"),
+          ),
           toggle: () => {
             assistantErrorState.isExpanded = !assistantErrorState.isExpanded;
             renderThinking(component, source, mode);

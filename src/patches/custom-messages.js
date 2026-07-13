@@ -69,6 +69,13 @@ export async function patchCompactCustomMessages(
       kind: "custom",
       label: artifactLabel(component.message),
       isExpanded: () => state.expandedOverride ?? state.isGloballyExpanded,
+      renderDetail: (width) => artifactContent(component.message)
+        .split("\n")
+        .map((line) => truncateToWidth(
+          theme.fg("customMessageText", line),
+          Math.max(1, width),
+          "…",
+        )),
       toggle: () => {
         const isExpanded = state.expandedOverride ?? state.isGloballyExpanded;
         state.expandedOverride = !isExpanded;

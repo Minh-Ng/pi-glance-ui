@@ -44,10 +44,21 @@ export async function patchCompactToolSpacing(
   const baseRender = prototype[baseRenderMethod];
   const baseSetExpanded = prototype[baseSetExpandedMethod];
   const renderNative = (component, width) => {
-    const originalDefinition = component.toolDefinition?.[ORIGINAL_TOOL_DEFINITION];
-    if (!originalDefinition) return baseRender.call(component, width);
+    const toolDefinition = component.toolDefinition;
+    const originalDefinition = toolDefinition?.[ORIGINAL_TOOL_DEFINITION];
+    const needsGenericDetailRenderer = toolDefinition
+      && typeof toolDefinition.renderCall !== "function"
+      && typeof toolDefinition.renderResult !== "function";
+    if (!originalDefinition && !needsGenericDetailRenderer) {
+      return baseRender.call(component, width);
+    }
+    // Pi treats the mere presence of a custom tool definition as an instruction
+    // to suppress generic JSON arguments, even when it provides no renderers.
+    // Recreate renderer-less tools without that empty definition so expanded
+    // mode uses Pi's complete name + arguments + result fallback.
+    const expandedDefinition = originalDefinition;
     let record = nativeComponents.get(component);
-    if (!record || record.component.toolDefinition !== originalDefinition) {
+    if (!record || record.definition !== expandedDefinition) {
       const native = new ToolExecutionComponent(
         component.toolName,
         component.toolCallId,
@@ -56,7 +67,7 @@ export async function patchCompactToolSpacing(
           showImages: component.showImages,
           imageWidthCells: component.imageWidthCells,
         },
-        originalDefinition,
+        expandedDefinition,
         component.ui,
         component.cwd,
       );
@@ -65,7 +76,7 @@ export async function patchCompactToolSpacing(
       const endedAt = component.rendererState.compactEndedAt ?? clock?.ended;
       if (startedAt !== undefined) native.rendererState.startedAt = startedAt;
       if (endedAt !== undefined) native.rendererState.endedAt = endedAt;
-      record = { component: native };
+      record = { component: native, definition: expandedDefinition };
       nativeComponents.set(component, record);
     }
     const native = record.component;
@@ -104,6 +115,20 @@ export async function patchCompactToolSpacing(
     }
     return baseRender.call(native, width);
   };
+  const renderExpandedDetail = (component, width) => {
+    const wasExpanded = component.expanded;
+    if (!wasExpanded) baseSetExpanded.call(component, true);
+    try {
+      const needsGenericDetailRenderer = component.toolDefinition
+        && typeof component.toolDefinition.renderCall !== "function"
+        && typeof component.toolDefinition.renderResult !== "function";
+      return needsGenericDetailRenderer
+        ? renderNative(component, width)
+        : baseRender.call(component, width);
+    } finally {
+      if (!wasExpanded) baseSetExpanded.call(component, false);
+    }
+  };
 
   prototype.setExpanded = function compactToolExpansion(isExpanded) {
     if (!isEnabled()) return baseSetExpanded.call(this, isExpanded);
@@ -133,6 +158,7 @@ export async function patchCompactToolSpacing(
         entry,
         this,
         (isExpanded) => baseSetExpanded.call(this, isExpanded),
+        (detailWidth) => renderExpandedDetail(this, detailWidth),
       );
       timeline.update(entry, { state: "running", theme, detail: () => [] });
       return [];
@@ -170,6 +196,7 @@ export async function patchCompactToolSpacing(
         entry,
         this,
         (isExpanded) => baseSetExpanded.call(this, isExpanded),
+        (detailWidth) => renderExpandedDetail(this, detailWidth),
       );
       const elapsed = clock.ended !== undefined
         ? ` · ${formatDuration(clock.ended - clock.started)}`
@@ -207,11 +234,17 @@ export async function patchCompactToolSpacing(
       entry,
       this,
       (isExpanded) => baseSetExpanded.call(this, isExpanded),
+      (detailWidth) => renderExpandedDetail(this, detailWidth),
     );
     const failed = !this.isPartial && Boolean(this.result?.isError);
     entry.state = failed ? "failed" : this.isPartial ? "running" : "complete";
 
-    const content = baseRender.call(this, width);
+    const needsGenericDetailRenderer = this.toolDefinition
+      && typeof this.toolDefinition.renderCall !== "function"
+      && typeof this.toolDefinition.renderResult !== "function";
+    const content = needsGenericDetailRenderer
+      ? renderNative(this, width)
+      : baseRender.call(this, width);
     const prefix = [];
     const isDetachedEntry = entry.detached && entry.group.entries[0] !== entry;
     if (entry.firstInAgent && !entry.detached) prefix.push("\u2800");

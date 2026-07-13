@@ -177,7 +177,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     message: [
       "Glance UI settings",
       "enabled: on (on|off) — compact tool rendering is active",
-      "patches: on for Pi 0.80.6 (on|off) — optional native transcript layout patches",
+      "patches: on for Pi 0.80.6 (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer",
       "working-detail: auto (auto|compact|expanded|hidden) — only the bottom-most running tool stays compact",
       "Change: /glance-ui settings <name> <value>",
       "Sections: /sections or Ctrl+Shift+O",
@@ -339,6 +339,85 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   const expanded = plain(components.flatMap((component) => component.render(200)));
   assert.match(expanded, /action-0/);
   assert.match(expanded, /action-11/);
+
+  const taskToolCases = [
+    {
+      name: "TaskCreate",
+      id: "task-create-detail",
+      args: {
+        subject: "Preserve complete task details",
+        description: "Show every TaskCreate field when tool output is expanded.",
+        activeForm: "Preserving complete task details",
+      },
+      expectedValues: [
+        "Preserve complete task details",
+        "Show every TaskCreate field when tool output is expanded.",
+        "Preserving complete task details",
+      ],
+      result: "Task #42 created successfully: Preserve complete task details",
+    },
+    {
+      name: "TaskUpdate",
+      id: "task-update-detail",
+      args: {
+        taskId: "42",
+        status: "in_progress",
+        owner: "main-thread",
+        metadata: { source: "expanded-tool-regression" },
+      },
+      expectedValues: ["42", "in_progress", "main-thread", "expanded-tool-regression"],
+      result: "Updated task #42 status, owner, metadata",
+    },
+  ];
+  for (const taskTool of taskToolCases) {
+    await startTool(harness, taskTool.id, taskTool.name, taskTool.args);
+    const component = new ToolExecutionComponent(
+      taskTool.name,
+      taskTool.id,
+      taskTool.args,
+      {},
+      {
+        name: taskTool.name,
+        label: taskTool.name,
+        description: `${taskTool.name} test definition without custom renderers`,
+        parameters: {},
+      },
+      harness.ui,
+      harness.ctx.cwd,
+    );
+    component.markExecutionStarted();
+    component.setArgsComplete();
+    component.updateResult({
+      content: [{ type: "text", text: taskTool.result }],
+      details: {},
+      isError: false,
+    });
+    component.setExpanded(true);
+    const taskDetail = plain(component.render(200));
+    assert.ok(taskDetail.includes(taskTool.name));
+    for (const value of taskTool.expectedValues) {
+      assert.ok(taskDetail.includes(value), `missing ${value} from:\n${taskDetail}`);
+    }
+    assert.ok(taskDetail.includes(taskTool.result));
+  }
+  await harness.registeredCommands.get("sections").handler("", harness.ctx);
+  const taskViewer = harness.getCustomComponent();
+  assert.deepEqual(harness.getCustomOptions().overlayOptions, {
+    width: "90%",
+    maxHeight: "80%",
+    anchor: "center",
+    margin: 1,
+  });
+  const taskCreateSectionIndex = taskViewer.sections.findIndex(
+    (section) => section.id === "tools:task-create-detail",
+  );
+  assert.notEqual(taskCreateSectionIndex, -1);
+  taskViewer.selectedIndex = taskCreateSectionIndex;
+  const taskCreateViewer = plain(taskViewer.render(180));
+  assert.match(taskCreateViewer, /Detail · .*Changed/);
+  assert.match(taskCreateViewer, /Preserve complete task details/);
+  assert.match(taskCreateViewer, /Show every TaskCreate field when tool output is expanded\./);
+  assert.match(taskCreateViewer, /Task #42 created successfully/);
 
   await emitAsync(harness, "before_agent_start");
   const categorizedTools = [
@@ -599,6 +678,9 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     "working-detail auto",
     harness.ctx,
   );
+  // The section-specific collapsed override survives a repeated application of
+  // the same global value. A real Ctrl+O cycle changes the global baseline.
+  workingExpanded.setExpanded(false);
   workingExpanded.setExpanded(true);
   assert.match(plain(workingExpanded.render(200)), /\$ printf working-expanded/);
   await harness.registeredCommands.get("glance-ui").handler(
@@ -1001,6 +1083,12 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   sectionNavigator.selectedIndex = failedToolSectionIndex;
   sectionNavigator.handleInput("\r");
   assert.match(plain(failedTool.render(200)), /▸ Plan · Explored/);
+  failedTool.setExpanded(false);
+  sectionNavigator.handleInput("\r");
+  assert.match(plain(failedTool.render(200)), /▾ Explored/);
+  // Pi repeatedly reapplies its unchanged global toolOutputExpanded value.
+  failedTool.setExpanded(false);
+  assert.match(plain(failedTool.render(200)), /▾ Explored/);
 
   const artifactSectionIndex = sectionNavigator.sections.findIndex(
     (section) => section.label === "Web content ready",

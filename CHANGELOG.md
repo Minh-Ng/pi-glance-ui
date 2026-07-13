@@ -2,6 +2,14 @@
 
 All notable changes to Pi Glance UI will be documented here.
 
+## Unreleased
+
+- Keep Thinking sections available in tool-heavy transcripts by removing the obsolete 50-section FIFO cap; the windowed navigator now safely browses the complete active transcript section set.
+- Make setup and runtime status explicit that version-approved private patches are required for Thinking, artifacts, errors, custom tools, and the complete section viewer; document activation and Pi-upgrade behavior prominently.
+- Add an in-overlay detail viewer to Ctrl+Shift+O: wide terminals show section list and selected content side by side, narrow terminals prioritize selected content, Page Up/Page Down scrolls long blocks, and the UI labels its top-recent/bottom-older ordering.
+- Preserve local section expansion through Pi's repeated global-state synchronization and transcript rebuilds.
+- Show complete arguments and results for expanded custom tools such as TaskCreate and TaskUpdate when they do not provide custom renderers.
+
 ## 0.2.4
 
 - Fix the Ctrl+Shift+O section navigator running off the page: the list is now windowed to the overlay's visible height with `↑ N more` / `↓ N more` indicators and always keeps the selected row on screen. Previously the list rendered from the top with no scrolling, so navigating down moved the selection (and the visible effect of toggling it) past the clipped overlay.
