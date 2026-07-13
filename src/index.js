@@ -225,7 +225,7 @@ export default function glanceUi(pi) {
       overlay: true,
       overlayOptions: {
         width: "90%",
-        maxHeight: "80%",
+        maxHeight: "85%",
         anchor: "center",
         margin: 1,
       },

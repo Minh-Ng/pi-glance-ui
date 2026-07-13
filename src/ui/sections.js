@@ -1,6 +1,36 @@
 import { matchesKey, Text, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { errorTitle, renderErrorText, trimBlankLines } from "../format.js";
 
+const FILTER_ORDER = [
+  "plan",
+  "implement",
+  "verify",
+  "coordinate",
+  "act",
+  "thinking",
+  "custom",
+  "assistantError",
+  "runtimeNotice",
+];
+
+const FILTER_LABELS = {
+  all: "All",
+  plan: "Plan",
+  implement: "Implement",
+  verify: "Verify",
+  coordinate: "Coordinate",
+  act: "Act",
+  thinking: "Thinking",
+  custom: "Artifacts",
+  assistantError: "Errors",
+  runtimeNotice: "Notices",
+  tools: "Actions",
+};
+
+function sectionFilterType(section) {
+  return section.filterType ?? section.kind ?? "other";
+}
+
 export class SectionController {
   constructor() {
     this.sectionsById = new Map();
@@ -38,6 +68,19 @@ export class SectionController {
 
 export class SectionNavigator {
   constructor({ sections, theme, onClose, requestRender, viewportRows }) {
+    this.allSections = sections;
+    this.availableFilters = [
+      "all",
+      ...[...new Set(sections.map(sectionFilterType))].sort((left, right) => {
+        const leftRank = FILTER_ORDER.indexOf(left);
+        const rightRank = FILTER_ORDER.indexOf(right);
+        if (leftRank === -1 && rightRank === -1) return left.localeCompare(right);
+        if (leftRank === -1) return 1;
+        if (rightRank === -1) return -1;
+        return leftRank - rightRank;
+      }),
+    ];
+    this.filterIndex = 0;
     this.sections = sections;
     this.theme = theme;
     this.onClose = onClose;
@@ -55,6 +98,11 @@ export class SectionNavigator {
   handleInput(data) {
     if (matchesKey(data, "escape") || matchesKey(data, "ctrl+c")) {
       this.onClose();
+      return;
+    }
+    if (matchesKey(data, "f")) {
+      this.cycleFilter();
+      this.requestRender();
       return;
     }
     if (matchesKey(data, "left")) {
@@ -116,6 +164,16 @@ export class SectionNavigator {
       this.sections[this.selectedIndex]?.toggle();
       this.requestRender();
     }
+  }
+
+  cycleFilter() {
+    this.filterIndex = (this.filterIndex + 1) % this.availableFilters.length;
+    const filter = this.availableFilters[this.filterIndex];
+    this.sections = filter === "all"
+      ? this.allSections
+      : this.allSections.filter((section) => sectionFilterType(section) === filter);
+    this.selectedIndex = 0;
+    this.detailScrollOffset = 0;
   }
 
   scrollDetail(delta) {
@@ -192,15 +250,15 @@ export class SectionNavigator {
   render(width) {
     const renderWidth = Math.max(1, width);
     const terminalRows = Math.max(8, this.viewportRows?.() ?? 24);
-    const overlayRows = Math.max(7, Math.floor(terminalRows * 0.8) - 2);
+    const overlayRows = Math.max(7, Math.floor(terminalRows * 0.85) - 2);
     const selected = this.sections[this.selectedIndex];
     const arrow = selected?.isExpanded() ? "▾" : "▸";
-    const actionGroups = this.sections.filter((section) => section.kind === "tools").length;
-    const thinkingSections = this.sections.filter((section) => section.kind === "thinking").length;
-    const sectionCounts = `${actionGroups} actions · ${thinkingSections} thinking`;
+    const activeFilter = this.availableFilters[this.filterIndex];
+    const filterLabel = FILTER_LABELS[activeFilter] ?? activeFilter;
+    const sectionCounts = `${filterLabel} · ${this.sections.length}/${this.allSections.length}`;
     const footer = this.theme.fg(
       "dim",
-      "←/→ or Tab pane · ↑↓ select/scroll · PgUp/PgDn detail · Enter toggle · Esc close",
+      "F filter · ←/→ or Tab pane · ↑↓ select/scroll · PgUp/PgDn detail · Enter toggle · Esc close",
     );
 
     if (renderWidth < 100) {
@@ -221,7 +279,7 @@ export class SectionNavigator {
 
     const divider = this.theme.fg("dim", " │ ");
     const dividerWidth = 3;
-    const listWidth = Math.max(30, Math.floor((renderWidth - dividerWidth) * 0.38));
+    const listWidth = Math.max(28, Math.floor((renderWidth - dividerWidth) * 0.28));
     const detailWidth = Math.max(1, renderWidth - listWidth - dividerWidth);
     const bodyRows = Math.max(1, overlayRows - 2);
     const listLines = this.windowSections(bodyRows);

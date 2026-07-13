@@ -27,7 +27,7 @@ Glance UI changes transcript presentation only. It does not change how tools exe
 ## Install
 
 ```bash
-pi install git:github.com/Minh-Ng/pi-glance-ui@v0.2.7
+pi install git:github.com/Minh-Ng/pi-glance-ui@v0.2.8
 ```
 
 Reload Pi after installation, then enable the version-scoped patches:
@@ -55,7 +55,7 @@ The command asks for explicit consent for the exact installed Pi version, probes
 | `/glance-ui on` | Enable Glance UI rendering |
 | `/glance-ui off` | Restore Pi's native transcript presentation immediately |
 
-The section navigator orders blocks with the most recent at the top and older blocks toward the bottom. It renders the selected block beside the list (or full-width on narrow terminals). Use Left/Right or Tab to focus the section list or detail pane, Up/Down to select or scroll one line, Page Up/Page Down to scroll detail by page, Enter or Space to toggle the transcript section, and Escape to close.
+The section navigator uses a narrow list and larger detail pane across 85% of the terminal height. Press F to cycle filters such as Plan, Implement, Verify, and Thinking. Use Left/Right or Tab to focus a pane, Up/Down to select or scroll one line, Page Up/Page Down to scroll detail by page, Enter or Space to toggle the transcript section, and Escape to close.
 
 Running tools use `auto` detail by default: the bottom-most running tool stays compact and completed output follows `Ctrl+O`. Other modes are covered in the [Power User Guide](docs/power-user-guide.md#running-tools).
 

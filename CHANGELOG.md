@@ -4,6 +4,10 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+## 0.2.8
+
+- Expand the `Ctrl+Shift+O` navigator to 85% terminal height, narrow its section list to enlarge detail, and add F-key filtering by action phase or section type.
+
 ## 0.2.7
 
 - Restore action sections in `Ctrl+Shift+O` after `/reload` by rebuilding them from the active session whenever the navigator opens; fallback detail retains tool arguments/results even when Pi never renders off-screen tool components, and visible action/Thinking counts make recovery observable.
