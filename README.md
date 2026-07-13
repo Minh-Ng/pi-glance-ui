@@ -57,6 +57,7 @@ Settings are saved to `~/.pi/agent/glance-ui.json`.
 - **Want native layout with compact tools?** Run `/glance-ui patches off`. Installed wrappers delegate immediately; after restart, no private patches are installed.
 - **Want Pi's original presentation?** Run `/glance-ui off`. Existing and new transcript components switch immediately; `/glance-ui on` restores public compact tool rendering.
 - **See “layout extras unavailable”?** A private renderer compatibility probe failed. The private layout transaction was rolled back; public compact tool summaries remain available where compatible.
+- **Testing changes from a local package checkout?** Fully restart Pi after changing revisions. `/reload` hot-reloads auto-discovered extension directories, not package-installed local paths.
 - **Setting was not saved?** Check that `~/.pi/agent` is writable. Glance UI reports when a change is session-only.
 
 ## Power users
