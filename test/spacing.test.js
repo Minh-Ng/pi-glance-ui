@@ -169,6 +169,45 @@ test("compact assistant rendering preserves native text-bearing spacing", async 
   );
   const glanceRows = measure(glanceComponents);
 
+  const mixedMessage = {
+    role: "assistant",
+    content: [
+      { type: "thinking", thinking: "Thought before prose" },
+      { type: "text", text: "Visible prose boundary" },
+      { type: "thinking", thinking: "Thought after prose" },
+    ],
+    stopReason: "stop",
+  };
+  const mixed = new AssistantMessageComponent(
+    mixedMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  mixed.setHideThinkingBlock(false);
+  const assertMixedSpacing = () => {
+    const children = mixed.contentContainer.children;
+    const thinkingIndexes = children
+      .map((child, index) => child?.defaultTextStyle?.italic === true ? index : -1)
+      .filter((index) => index >= 0);
+    assert.equal(thinkingIndexes.length, 2);
+    for (const index of thinkingIndexes) {
+      assert.equal(
+        children[index - 1]?.constructor?.name,
+        "Spacer",
+        "every rendered Thinking child has a blank before it",
+      );
+      assert.notEqual(
+        children[index - 2]?.constructor?.name,
+        "Spacer",
+        "rendered Thinking never has two blanks before it",
+      );
+    }
+  };
+  assertMixedSpacing();
+  mixed.updateContent(mixedMessage);
+  assertMixedSpacing();
+
   // Toggle glance off in-process to capture the true native baseline; the
   // render path re-runs updateContent when the enabled state changes.
   const command = target.commands.get("glance-ui").handler;

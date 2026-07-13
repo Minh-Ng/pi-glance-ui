@@ -76,6 +76,29 @@ export class TranscriptSpacer {
     }
   }
 
+  // Ensure every Thinking child inside one assistant component has exactly one
+  // blank immediately before it. Native Pi already separates Thinking→text but
+  // not text→Thinking, which is why mixed-content continuations looked uneven.
+  normalizeRenderedThinkingChildren(component, isThinkingChild) {
+    const children = component?.contentContainer?.children;
+    if (!Array.isArray(children)) return;
+    for (let index = 0; index < children.length; index += 1) {
+      if (!isThinkingChild(children[index])) continue;
+      let separatorStart = index;
+      while (separatorStart > 0 && this.isSpacer(children[separatorStart - 1])) {
+        separatorStart -= 1;
+      }
+      const separatorCount = index - separatorStart;
+      if (separatorCount === 0) {
+        children.splice(index, 0, new Spacer(1));
+        index += 1;
+      } else if (separatorCount > 1) {
+        children.splice(separatorStart, separatorCount - 1);
+        index -= separatorCount - 1;
+      }
+    }
+  }
+
   // Pi can provide both a transcript-level spacer and a Thinking component's
   // own leading spacer. Keep the component spacer as the single visible blank
   // and temporarily remove any transcript-level duplicates. Store removed

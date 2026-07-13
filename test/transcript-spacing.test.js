@@ -60,6 +60,43 @@ test("thinking-only keeps exactly one leading blank after any visible block", ()
   assert.equal(afterUser.contentContainer.children.length, 2);
 });
 
+test("mixed assistant content gets exactly one blank before every Thinking child", () => {
+  const s = spacer();
+  const firstThinking = {};
+  const proseChild = {};
+  const secondThinking = {};
+  const thirdThinking = {};
+  const component = {
+    contentContainer: {
+      children: [
+        firstThinking,
+        new Spacer(1),
+        proseChild,
+        secondThinking,
+        new Spacer(1),
+        new Spacer(1),
+        thirdThinking,
+      ],
+    },
+  };
+  const thinkingChildren = new Set([firstThinking, secondThinking, thirdThinking]);
+  const normalize = () => s.normalizeRenderedThinkingChildren(
+    component,
+    (child) => thinkingChildren.has(child),
+  );
+
+  normalize();
+  const normalized = component.contentContainer.children;
+  assert.equal(normalized.length, 8);
+  assert.deepEqual(
+    [normalized[1], normalized[3], normalized[5], normalized[7]],
+    [firstThinking, proseChild, secondThinking, thirdThinking],
+  );
+  assert.ok([0, 2, 4, 6].every((index) => isSpacer(normalized[index])));
+  normalize();
+  assert.equal(component.contentContainer.children.length, 8, "repeated normalization never stacks");
+});
+
 test("thinking removes duplicate transcript spacers but keeps its internal blank", () => {
   const s = spacer();
   const first = thinking(true);

@@ -310,6 +310,10 @@ export async function patchHiddenThinkingLayout(
             }
           }
         }
+        transcriptSpacer.normalizeRenderedThinkingChildren(
+          component,
+          (child) => child?.[compactThinkingRawText] !== undefined,
+        );
         transcriptSpacer.refreshThinking(component);
         return result;
       } finally {
