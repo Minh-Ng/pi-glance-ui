@@ -67,3 +67,35 @@ test("spacers between entries are ignored when computing adjacency", () => {
   s.normalize([p, new Spacer(1), tool()]);
   assert.equal(trailing(p), true, "tool after an interleaved spacer still counts");
 });
+
+// A /reload or session replacement creates a new extension generation with a
+// fresh TranscriptSpacer. Its bookkeeping must survive that handoff: replayed
+// components were stamped by the previous generation, and re-normalizing them
+// must not duplicate separators or strand suppression state.
+test("a new generation does not duplicate a separator added by a prior generation", () => {
+  const p = prose();
+  spacer().normalize([p, tool()]); // old generation
+  assert.equal(p.contentContainer.children.length, 2);
+  spacer().normalize([p, tool()]); // new generation, fresh instance
+  assert.equal(
+    p.contentContainer.children.length,
+    2,
+    "must not stack a second blank across generations",
+  );
+});
+
+test("a new generation removes a separator added by a prior generation", () => {
+  const p = prose();
+  spacer().normalize([p, tool()]);
+  assert.equal(trailing(p), true);
+  spacer().normalize([p, user()]);
+  assert.equal(trailing(p), false, "stale separator from prior generation must be removed");
+});
+
+test("thinking suppression state survives the generation handoff", () => {
+  const t = thinking(true);
+  spacer().normalize([prose(), t]);
+  assert.equal(leading(t), false);
+  spacer().normalize([user(), t]);
+  assert.equal(leading(t), true, "new generation must restore a blank the old one suppressed");
+});
