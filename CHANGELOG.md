@@ -4,6 +4,8 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+- Preserve validated private-patch state while `/resume` replays the replacement session before its `session_start`, so historical Thinking and tools remain compact; removed or changed consent still disables inherited wrappers immediately.
+
 ## 0.2.4
 
 - Load version checks and built-in tool factories from the running Pi installation so consent and private patches always target the same module graph.
