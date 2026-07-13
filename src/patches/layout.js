@@ -8,6 +8,7 @@ import { patchCompactMarkdown } from "./markdown.js";
 import { patchCompactRuntimeErrors } from "./runtime-errors.js";
 import { patchCompactToolSpacing } from "./tools.js";
 import { PatchTransaction } from "./transaction.js";
+import { TranscriptSpacer } from "../ui/transcript-spacing.js";
 
 const PI_CODING_AGENT_SCOPES = [
   "@earendil-works/pi-coding-agent",
@@ -57,9 +58,6 @@ export async function patchHiddenThinkingLayout(
   const errorStateByComponent = new WeakMap();
   const thinkingStateByComponent = new WeakMap();
   const compactThinkingRawText = Symbol("compact-thinking-raw-text");
-  const suppressLeadingThinkingSpacer = Symbol("suppress-leading-thinking-spacer");
-  const trailingActionSeparator = Symbol("trailing-action-separator");
-  const previousTranscriptContent = Symbol("previous-transcript-content");
   let assistantGeneration = 0;
   let latestCompactThinkingComponent;
   let nextErrorSectionId = 1;
@@ -88,9 +86,6 @@ export async function patchHiddenThinkingLayout(
       );
   };
 
-  const isSpacerComponent = (component) => component instanceof Spacer
-    || component?.constructor?.name === "Spacer";
-
   // An assistant message that carries visible prose (text), as opposed to a
   // thinking-only block. Thinking-only blocks manage their own leading spacer.
   const isTextBearingAssistant = (component) => {
@@ -103,85 +98,13 @@ export async function patchHiddenThinkingLayout(
   const isToolComponent = (component) =>
     component?.constructor?.name === "ToolExecutionComponent";
 
-  const refreshThinkingSpacing = (component) => {
-    if (!component?.contentContainer?.children) return;
-    const wasSuppressed = Boolean(component[suppressLeadingThinkingSpacer]);
-    const previous = component[previousTranscriptContent];
-    const followsUserBoundary = !previous
-      || previous.constructor?.name === "UserMessageComponent";
-    const shouldSuppress = isThinkingOnlyComponent(component) && !followsUserBoundary;
-    component[suppressLeadingThinkingSpacer] = shouldSuppress;
-    const firstChild = component.contentContainer.children[0];
-    if (shouldSuppress && isSpacerComponent(firstChild)) {
-      component.contentContainer.children.shift();
-    } else if (
-      !shouldSuppress
-      && wasSuppressed
-      && !isSpacerComponent(firstChild)
-      && component.contentContainer.children.length > 0
-    ) {
-      component.contentContainer.children.unshift(new Spacer(1));
-    }
-  };
-
-  const recordTranscriptAdjacency = (children = []) => {
-    let previousContent;
-    for (const child of children) {
-      if (isSpacerComponent(child)) continue;
-      child[previousTranscriptContent] = previousContent;
-      previousContent = child;
-    }
-  };
-
-  // Glance collapses consecutive tool calls into one grouped "Act · Ran" summary
-  // that renders flush against whatever precedes it. Native Pi separates an
-  // assistant text message from a following tool with a blank line, so the
-  // grouped summary butting directly against prose reads as cramped. Re-add
-  // exactly one blank line as a trailing spacer on the prose message when it is
-  // immediately followed by a tool component.
-  //
-  // The separator is NOT needed — and is removed — whenever that adjacency stops
-  // holding: the message is no longer text-bearing, or its next non-spacer
-  // sibling is not a tool (e.g. a user message, another assistant reply, or the
-  // message is now last in the transcript). We track whether we added it via a
-  // per-component flag so the add/remove is idempotent across re-renders and
-  // does not stack duplicate blanks or fight Pi's own spacing.
-  const applyActionSeparator = (component, next) => {
-    const container = component?.contentContainer;
-    if (!container?.children) return;
-    const last = container.children[container.children.length - 1];
-    const hadSeparator = Boolean(component[trailingActionSeparator]);
-    const shouldSeparate = isTextBearingAssistant(component) && isToolComponent(next);
-    if (shouldSeparate) {
-      if (!(hadSeparator && isSpacerComponent(last))) {
-        container.children.push(new Spacer(1));
-        component[trailingActionSeparator] = true;
-      }
-    } else if (hadSeparator) {
-      if (isSpacerComponent(last)) container.children.pop();
-      component[trailingActionSeparator] = false;
-    }
-  };
-
-  const separateProseFromFollowingActions = (children = []) => {
-    let previous;
-    for (const child of children) {
-      if (isSpacerComponent(child)) continue;
-      if (previous) applyActionSeparator(previous, child);
-      previous = child;
-    }
-    // Evaluate the final component with no successor so a stale separator left
-    // by a now-removed trailing tool group is cleared.
-    if (previous) applyActionSeparator(previous, undefined);
-  };
-
-  const normalizeConsecutiveThinkingSpacing = (children = []) => {
-    recordTranscriptAdjacency(children);
-    for (const child of children) {
-      if (!isSpacerComponent(child)) refreshThinkingSpacing(child);
-    }
-    separateProseFromFollowingActions(children);
-  };
+  // Thinking spacing, the prose→action separator, and their idempotent add/remove
+  // bookkeeping live in one cohesive unit; see TranscriptSpacer.
+  const transcriptSpacer = new TranscriptSpacer({
+    isThinkingOnlyComponent,
+    isTextBearingAssistant,
+    isToolComponent,
+  });
 
   const getThinkingState = (component) => {
     let thinkingState = thinkingStateByComponent.get(component);
@@ -228,8 +151,7 @@ export async function patchHiddenThinkingLayout(
       timeline,
       sectionController,
       resetAssistantSections,
-      recordTranscriptAdjacency,
-      normalizeConsecutiveThinkingSpacing,
+      (children) => transcriptSpacer.normalize(children),
       isEnabled,
       transaction,
     );
@@ -385,7 +307,7 @@ export async function patchHiddenThinkingLayout(
             }
           }
         }
-        refreshThinkingSpacing(component);
+        transcriptSpacer.refreshThinking(component);
         return result;
       } finally {
         component.hideThinkingBlock = wasHidden;

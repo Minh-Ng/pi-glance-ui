@@ -6,8 +6,7 @@ export async function patchCompactRuntimeErrors(
   timeline,
   sectionController,
   resetAssistantSections,
-  recordTranscriptAdjacency,
-  normalizeConsecutiveThinkingSpacing,
+  normalizeTranscriptSpacing,
   isEnabled,
   transaction,
 ) {
@@ -78,9 +77,8 @@ export async function patchCompactRuntimeErrors(
       || event.type === "message_end"
       || (event.type === "message_update" && streamingHasToolCall)
     );
-    if (shouldNormalize) {
-      recordTranscriptAdjacency(this.chatContainer?.children);
-      if (isEnabled()) normalizeConsecutiveThinkingSpacing(this.chatContainer?.children);
+    if (shouldNormalize && isEnabled()) {
+      normalizeTranscriptSpacing(this.chatContainer?.children);
     }
     return result;
   };
@@ -97,7 +95,7 @@ export async function patchCompactRuntimeErrors(
     timeline.rebuildFromMessages(messages, this.streamingMessage);
     try {
       const result = baseRenderSessionEntries.call(this, entries, options);
-      normalizeConsecutiveThinkingSpacing(this.chatContainer?.children);
+      normalizeTranscriptSpacing(this.chatContainer?.children);
       return result;
     } finally {
       timeline.finishTranscriptRebuild();
