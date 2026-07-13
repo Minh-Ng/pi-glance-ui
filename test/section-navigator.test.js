@@ -77,6 +77,7 @@ test("Enter toggles the selected section's expansion arrow", () => {
 test("wide overlays render the selected section in a detail pane", () => {
   const nav = navigator(5, 30);
   let out = plain(nav.render(120));
+  assert.match(out, /Sections · ↑ recent · ↓ older/);
   assert.match(out, /Detail · Section 0/);
   assert.match(out, /Detail for section 0/);
 
@@ -91,7 +92,7 @@ test("narrow overlays prioritize readable selected detail", () => {
   const nav = navigator(5, 30);
   nav.selectedIndex = 3;
   const out = plain(nav.render(80));
-  assert.match(out, /Section detail/);
+  assert.match(out, /Section detail · ↑ recent · ↓ older/);
   assert.match(out, /Section 3 \(4\/5\)/);
   assert.match(out, /Detail for section 3/);
   assert.doesNotMatch(out, /Section 2/);

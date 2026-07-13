@@ -4,7 +4,7 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
-- Add an in-overlay detail viewer to Ctrl+Shift+O: wide terminals show section list and selected content side by side, narrow terminals prioritize selected content, and Page Up/Page Down scrolls long blocks.
+- Add an in-overlay detail viewer to Ctrl+Shift+O: wide terminals show section list and selected content side by side, narrow terminals prioritize selected content, Page Up/Page Down scrolls long blocks, and the UI labels its top-recent/bottom-older ordering.
 - Preserve local section expansion through Pi's repeated global-state synchronization and transcript rebuilds.
 - Show complete arguments and results for expanded custom tools such as TaskCreate and TaskUpdate when they do not provide custom renderers.
 

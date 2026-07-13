@@ -185,7 +185,7 @@ export class SectionNavigator {
       );
       const title = `${arrow} ${selected?.label ?? "Section"} (${this.selectedIndex + 1}/${this.sections.length})`;
       return [
-        this.theme.fg("accent", this.theme.bold("Section detail")),
+        this.theme.fg("accent", this.theme.bold("Section detail · ↑ recent · ↓ older")),
         this.theme.fg("accent", title),
         ...detail,
         footer,
@@ -202,7 +202,10 @@ export class SectionNavigator {
       this.renderSectionDetail(selected, detailWidth),
       bodyRows,
     );
-    const leftHeader = this.theme.fg("accent", this.theme.bold("Sections"));
+    const leftHeader = this.theme.fg(
+      "accent",
+      this.theme.bold("Sections · ↑ recent · ↓ older"),
+    );
     const rightHeader = this.theme.fg("accent", this.theme.bold(`Detail · ${selected?.label ?? "Section"}`));
     const fitColumn = (line, columnWidth) => {
       const fitted = truncateToWidth(line ?? "", columnWidth, "…");

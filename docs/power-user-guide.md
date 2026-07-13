@@ -34,7 +34,7 @@ Compact rows retain useful arguments such as Bash commands, file paths, edit cou
 
 `Ctrl+O` always controls completed tool detail. With private patches on, it also controls recorded Thinking and custom artifacts, while `Ctrl+T` controls Thinking visibility.
 
-Use `/sections` or `Ctrl+Shift+O` to browse and locally override sections. The selected block is rendered in a detail pane beside the list; narrow terminals devote the overlay to that selected detail.
+Use `/sections` or `Ctrl+Shift+O` to browse and locally override sections. The list runs from most recent at the top to older at the bottom. The selected block is rendered in a detail pane beside the list; narrow terminals devote the overlay to that selected detail.
 
 - Up/Down selects a section and refreshes its detail.
 - Page Up/Page Down scrolls long detail; Home/End jumps to its bounds.
