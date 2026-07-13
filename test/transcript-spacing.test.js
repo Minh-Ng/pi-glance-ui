@@ -215,6 +215,23 @@ test("dense mode looks through hidden tool-only continuations to the last visibl
     false,
     "prose separator plus hidden tools must not add a second blank before Thinking",
   );
+
+  const separatedProse = prose();
+  const separatedThinking = thinking(true);
+  const separatedSpacer = spacer("separated");
+  separatedSpacer.normalize([
+    separatedProse,
+    tool(false),
+    ...hiddenChain(),
+    separatedThinking,
+  ]);
+  separatedSpacer.refreshThinking(separatedThinking, 80);
+  assert.equal(trailing(separatedProse), true);
+  assert.equal(
+    leading(separatedThinking),
+    false,
+    "separated mode also deduplicates an already-owned prose boundary",
+  );
 });
 
 test("all assistant→tool boundaries add spacing only when final prose requires it", () => {

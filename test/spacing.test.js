@@ -726,5 +726,17 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
     "settings transcript-spacing separated",
     target.ctx,
   );
-  assert.equal(leadingBlankRows(secondThinking, 80), 1, "separated mode restores the blank live");
+  assert.equal(leadingBlankRows(secondThinking, 80), 1, "separated mode restores the blank after a visible tool");
+  assert.equal(
+    leadingBlankRows(afterProseTools, 80),
+    0,
+    "separated mode deduplicates prose spacing through hidden tools",
+  );
+  assert.equal(
+    trailingBlankRows(finalProseWithTool, 80)
+      + intermediateBlankRows
+      + leadingBlankRows(afterProseTools, 80),
+    1,
+    "separated multi-paragraph prose→hidden tools→Thinking has one total blank",
+  );
 });

@@ -53,43 +53,44 @@ export class TranscriptSpacer {
     return component instanceof Spacer || component?.constructor?.name === "Spacer";
   }
 
-  // Separated mode keeps one blank before every leading Thinking block. Dense
-  // mode removes that blank only when a prior Thinking/tool continues the same
-  // cluster, retaining one blank at the cluster's outer boundary.
+  // Separated mode keeps one blank before every visible Thinking block unless
+  // final prose already supplied that same boundary through only hidden rows.
+  // Dense mode additionally removes blanks inside visible Thinking/tool clusters.
   refreshThinking(component, width) {
     const children = component?.contentContainer?.children;
     if (!Array.isArray(children) || !this.startsWithThinkingComponent(component)) return;
+    const dense = this.getTranscriptSpacingMode() === "dense";
     let previous = component[this.previousContent];
-    let continuesDenseCluster = false;
-    if (this.getTranscriptSpacingMode() === "dense") {
-      while (previous) {
-        if (
-          this.endsWithThinkingComponent(previous)
-          || previous[this.trailingSeparator] === true
-        ) {
-          continuesDenseCluster = true;
-          break;
-        }
-        if (this.isToolComponent(previous)) {
-          if (width !== undefined && this.isVisiblyRenderedTool(previous, width)) {
-            continuesDenseCluster = true;
-            break;
-          }
-          previous = previous[this.previousContent];
-          continue;
-        }
-        if (this.isTransparentComponent(previous)) {
-          previous = previous[this.previousContent];
-          continue;
-        }
+    let suppressLeadingSpacer = false;
+    while (previous) {
+      if (previous[this.trailingSeparator] === true) {
+        suppressLeadingSpacer = true;
         break;
       }
+      if (dense && this.endsWithThinkingComponent(previous)) {
+        suppressLeadingSpacer = true;
+        break;
+      }
+      if (this.isToolComponent(previous)) {
+        const visible = width !== undefined && this.isVisiblyRenderedTool(previous, width);
+        if (visible) {
+          suppressLeadingSpacer = dense;
+          break;
+        }
+        previous = previous[this.previousContent];
+        continue;
+      }
+      if (this.isTransparentComponent(previous)) {
+        previous = previous[this.previousContent];
+        continue;
+      }
+      break;
     }
-    component[this.suppressLeadingSpacer] = continuesDenseCluster;
+    component[this.suppressLeadingSpacer] = suppressLeadingSpacer;
 
     let leadingCount = 0;
     while (this.isSpacer(children[leadingCount])) leadingCount += 1;
-    const desired = continuesDenseCluster ? 0 : 1;
+    const desired = suppressLeadingSpacer ? 0 : 1;
     if (leadingCount < desired && children.length > 0) {
       children.unshift(new Spacer(1));
     } else if (leadingCount > desired) {
