@@ -167,6 +167,18 @@ test("dense mode looks through hidden tool-only continuations to the last visibl
   thinkingSpacer.normalize([thinking(true), ...hiddenChain(), afterThinking]);
   thinkingSpacer.refreshThinking(afterThinking, 80);
   assert.equal(leading(afterThinking), false, "hidden tools inside a Thinking cluster remain contiguous");
+
+  const finalProse = prose();
+  const afterProseTools = thinking(true);
+  const proseSpacer = spacer("dense");
+  proseSpacer.normalize([finalProse, tool(false), ...hiddenChain(), afterProseTools]);
+  proseSpacer.refreshThinking(afterProseTools, 80);
+  assert.equal(trailing(finalProse), true, "final prose supplies the cluster's outer blank");
+  assert.equal(
+    leading(afterProseTools),
+    false,
+    "prose separator plus hidden tools must not add a second blank before Thinking",
+  );
 });
 
 test("all assistant→tool boundaries add spacing only when final prose requires it", () => {

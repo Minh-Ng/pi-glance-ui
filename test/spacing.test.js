@@ -602,6 +602,47 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
     "dense replay user→hidden tools→Thinking keeps one outer blank",
   );
 
+  const finalProseWithTool = new AssistantMessageComponent(
+    {
+      role: "assistant",
+      content: [
+        { type: "text", text: "Assistant output before hidden actions" },
+        { type: "toolCall", id: "prose-tool", name: "TaskUpdate", arguments: {} },
+      ],
+      stopReason: "toolUse",
+    },
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const afterProseTools = new AssistantMessageComponent(
+    thinkingMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const proseReplayChildren = [
+    finalProseWithTool,
+    { constructor: { name: "ToolExecutionComponent" }, render: () => [] },
+    toolOnlyAssistant,
+    hiddenReplayTool,
+    afterProseTools,
+  ];
+  InteractiveMode.prototype.renderSessionEntries.call({
+    chatContainer: { children: proseReplayChildren },
+    renderSessionItems() {},
+  }, []);
+  assert.equal(
+    finalProseWithTool.contentContainer.children.at(-1)?.constructor?.name,
+    "Spacer",
+    "final assistant prose supplies one outer cluster blank",
+  );
+  assert.equal(
+    leadingBlankRows(afterProseTools, 80),
+    0,
+    "assistant prose→hidden tools→Thinking does not add a second blank",
+  );
+
   await target.commands.get("glance-ui").handler(
     "settings transcript-spacing separated",
     target.ctx,

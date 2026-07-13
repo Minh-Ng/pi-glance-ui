@@ -63,7 +63,10 @@ export class TranscriptSpacer {
     let continuesDenseCluster = false;
     if (this.getTranscriptSpacingMode() === "dense") {
       while (previous) {
-        if (this.endsWithThinkingComponent(previous)) {
+        if (
+          this.endsWithThinkingComponent(previous)
+          || previous[this.trailingSeparator] === true
+        ) {
           continuesDenseCluster = true;
           break;
         }
