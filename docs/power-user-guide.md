@@ -40,7 +40,7 @@ Compact rows retain useful arguments such as Bash commands, file paths, edit cou
 
 Use `/sections` or `Ctrl+Shift+O` to browse and locally override sections. The narrower list leaves more room for detail, and the overlay uses 85% of terminal height. The list runs from most recent at the top to older at the bottom; narrow terminals devote the overlay to selected detail.
 
-- F cycles available section filters (All, Plan, Implement, Verify, Coordinate, Act, Thinking, and other present types).
+- Lowercase `f` cycles available section filters (All, Plan, Implement, Verify, Coordinate, Act, Thinking, and other present types).
 - Left/Right or Tab focuses the section list or detail pane.
 - Up/Down selects a section in the list or scrolls focused detail one line.
 - Page Up/Page Down scrolls detail by page; Home/End jumps to its bounds.

@@ -4,6 +4,8 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+- Clarify section filtering with an explicit `Filter:` header and a spaced lowercase `f: cycle filter` footer hint.
+
 ## 0.2.8
 
 - Expand the `Ctrl+Shift+O` navigator to 85% terminal height, narrow its section list to enlarge detail, and add F-key filtering by action phase or section type.

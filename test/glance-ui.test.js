@@ -1074,7 +1074,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   await harness.registeredCommands.get("sections").handler("", harness.ctx);
   const sectionNavigator = harness.getCustomComponent();
   assert.equal(harness.getCustomOptions().overlay, true);
-  assert.match(plain(sectionNavigator.render(120)), /Sections/);
+  assert.match(plain(sectionNavigator.render(120)), /Filter: All/);
 
   const failedToolSectionIndex = sectionNavigator.sections.findIndex(
     (section) => section.label === "Plan · Explored · 1 action" && section.isExpanded(),
