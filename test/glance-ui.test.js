@@ -103,19 +103,19 @@ test("glance-ui config persists valid settings and tolerates malformed data", ()
   try {
     saveGlanceUiConfig({
       enabled: false,
-      patchesVersion: "0.80.6",
+      patchesVersion: "0.80.7",
       workingDetailMode: "hidden",
       transcriptSpacing: "dense",
     }, path);
     assert.deepEqual(loadGlanceUiConfig(path), {
       enabled: false,
-      patchesVersion: "0.80.6",
+      patchesVersion: "0.80.7",
       workingDetailMode: "hidden",
       transcriptSpacing: "dense",
     });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), {
       enabled: false,
-      patchesVersion: "0.80.6",
+      patchesVersion: "0.80.7",
       workingDetailMode: "hidden",
       transcriptSpacing: "dense",
     });
@@ -145,7 +145,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     rmSync(configDirectory, { recursive: true, force: true });
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
-    patchesVersion: "0.80.6",
+    patchesVersion: "0.80.7",
   }));
   const harness = createExtensionHarness();
   glanceUi(harness.pi);
@@ -155,7 +155,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     "./modes/interactive/theme/theme.js",
     codingAgentEntryUrl,
   );
-  const { initTheme } = await import(themeUrl.href);
+  const { initTheme, theme } = await import(themeUrl.href);
   initTheme("dark");
 
   await emitAsync(harness, "session_start");
@@ -173,7 +173,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   ]);
   assert.deepEqual(JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")), {
     enabled: true,
-    patchesVersion: "0.80.6",
+    patchesVersion: "0.80.7",
     workingDetailMode: "auto",
     transcriptSpacing: "separated",
   });
@@ -182,8 +182,8 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     message: [
       "Glance UI settings",
       "enabled: on (on|off) — compact tool rendering is active",
-      "patches: on for Pi 0.80.6 (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer",
-      "working-detail: auto (auto|compact|expanded|hidden) — only the bottom-most running tool stays compact",
+      "patches: on for Pi 0.80.7 (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer",
+      "working-detail: auto (auto|compact|expanded|hidden) — tools stay expanded while running and for 5s after the completed result renders",
       "transcript-spacing: separated (dense|separated) — every Thinking block has a leading blank",
       "Change: /glance-ui settings <name> <value>",
       "Sections: /sections or Ctrl+Shift+O",
@@ -279,8 +279,13 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
 
   const footerSession = {
     state: {
-      model: { id: "test-model", contextWindow: 128_000, reasoning: false },
-      thinkingLevel: "off",
+      model: {
+        id: "test-model",
+        provider: "openai-codex",
+        contextWindow: 128_000,
+        reasoning: true,
+      },
+      thinkingLevel: "high",
     },
     sessionManager: {
       getCwd: () => "/tmp/project",
@@ -290,9 +295,13 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     modelRegistry: { isUsingOAuth: () => false },
     getContextUsage: () => ({ contextWindow: 128_000, percent: 10, tokens: 12_800 }),
   };
+  const footerStatuses = new Map([
+    ["context-window", "epoch_win 1/20t"],
+    ["pi-openai-fast-mode", "OpenAI fast"],
+  ]);
   const footerData = {
-    getAvailableProviderCount: () => 1,
-    getExtensionStatuses: () => new Map([["context-window", "epoch_win 1/20t"]]),
+    getAvailableProviderCount: () => 2,
+    getExtensionStatuses: () => footerStatuses,
     getGitBranch: () => "main",
   };
   const footer = new FooterComponent(footerSession, footerData);
@@ -300,12 +309,13 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     Symbol.for("pi-compact-ui.footer-base-render")
   ].call(footer, 78);
   const compactFooterLines = footer.render(80);
-  assert.deepEqual(
-    compactFooterLines,
-    nativeFooterLines.map((line) => ` ${line}`),
-  );
+  assert.equal(compactFooterLines[0], ` ${nativeFooterLines[0]}`);
+  assert.equal(compactFooterLines.length, nativeFooterLines.length);
   assert.ok(compactFooterLines.every((line) => plain([line]).startsWith(" ")));
+  assert.match(compactFooterLines[1], /\(openai-codex\) test-model • high • fast/);
   assert.equal(plain([compactFooterLines[1]]).length, 79);
+  assert.match(plain([compactFooterLines[2]]), /epoch_win 1\/20t/);
+  assert.doesNotMatch(plain([compactFooterLines[2]]), /OpenAI fast/);
 
   for (let index = 0; index < 12; index += 1) {
     await startTool(harness, `tool-${index}`, "custom_action", {
@@ -329,6 +339,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
       details: {},
       isError: false,
     });
+    component.setExpanded(false);
     return component;
   });
 
@@ -450,6 +461,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
       details: {},
       isError: false,
     });
+    component.setExpanded(false);
     component.render(200);
     return component;
   });
@@ -475,6 +487,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     details: {},
     isError: false,
   });
+  bashComponent.setExpanded(false);
   bashComponent.render(200);
   const categorizedLines = [
     ...categoryComponents.flatMap((component) => component.render(200)),
@@ -496,6 +509,15 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   ].call(bashComponent, 200);
   const compactExpandedBashLines = bashComponent.render(200);
   const expandedBash = plain(compactExpandedBashLines);
+  const successBackgroundProbe = theme.bg("toolSuccessBg", "__background__");
+  const successBackgroundPrefix = successBackgroundProbe.slice(
+    0,
+    successBackgroundProbe.indexOf("__background__"),
+  );
+  assert.ok(
+    compactExpandedBashLines.some((line) => line.startsWith(successBackgroundPrefix)),
+    "expanded built-in tools use the same native success background as other tools",
+  );
   assert.match(expandedBash, /printf glance-ui-test/);
   assert.match(expandedBash, /glance-ui-test/);
   assert.match(expandedBash, /▾ Ran/);
@@ -524,9 +546,11 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     details: {},
     isError: false,
   });
+  verifyComponent.setExpanded(false);
   assert.match(plain(verifyComponent.render(200)), /Verify · Ran/);
 
   await emitAsync(harness, "before_agent_start");
+  t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 100_000 });
   await startTool(harness, "working-auto", "bash", { command: "printf working-auto" });
   const workingAuto = new ToolExecutionComponent(
     "bash",
@@ -537,18 +561,39 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     harness.ui,
     harness.ctx.cwd,
   );
+  workingAuto.setExpanded(false);
   workingAuto.markExecutionStarted();
   workingAuto.setArgsComplete();
-  workingAuto.setExpanded(true);
-  const compactWorking = plain(workingAuto.render(200));
-  assert.match(compactWorking, /▸ Act · Ran/);
-  assert.match(compactWorking, /Bash printf working-auto/);
-  assert.doesNotMatch(compactWorking, /\$ printf working-auto/);
+  const firstFullWorkingLines = workingAuto.render(200);
+  const firstFullWorkingRender = plain(firstFullWorkingLines);
+  const pendingBackgroundProbe = theme.bg("toolPendingBg", "__background__");
+  const pendingBackgroundPrefix = pendingBackgroundProbe.slice(
+    0,
+    pendingBackgroundProbe.indexOf("__background__"),
+  );
+  assert.ok(
+    firstFullWorkingLines.some((line) => line.startsWith(pendingBackgroundPrefix)),
+    "expanded running built-in tools use the same native pending background as other tools",
+  );
+  assert.match(firstFullWorkingRender, /\$ printf working-auto/);
+  t.mock.timers.tick(4_999);
+  assert.match(plain(workingAuto.render(200)), /\$ printf working-auto/);
+  t.mock.timers.tick(1);
+  assert.match(plain(workingAuto.render(200)), /\$ printf working-auto/);
   workingAuto.updateResult({
     content: [{ type: "text", text: "working-auto complete" }],
     details: {},
     isError: false,
   });
+  assert.match(plain(workingAuto.render(200)), /working-auto complete/);
+  t.mock.timers.tick(4_999);
+  assert.match(plain(workingAuto.render(200)), /\$ printf working-auto/);
+  t.mock.timers.tick(1);
+  const compactWorking = plain(workingAuto.render(200));
+  assert.match(compactWorking, /▸ Act · Ran/);
+  assert.match(compactWorking, /Bash printf working-auto/);
+  assert.doesNotMatch(compactWorking, /\$ printf working-auto/);
+  workingAuto.setExpanded(true);
   const completedWorking = plain(workingAuto.render(200));
   assert.match(completedWorking, /\$ printf working-auto/);
   assert.match(completedWorking, /working-auto complete/);
@@ -565,9 +610,9 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     harness.ui,
     harness.ctx.cwd,
   );
+  workingEarlier.setExpanded(false);
   workingEarlier.markExecutionStarted();
   workingEarlier.setArgsComplete();
-  workingEarlier.setExpanded(true);
   await startTool(harness, "working-bottom", "bash", {
     command: "printf working-bottom",
   });
@@ -580,17 +625,21 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     harness.ui,
     harness.ctx.cwd,
   );
+  workingBottom.setExpanded(false);
   workingBottom.markExecutionStarted();
   workingBottom.setArgsComplete();
-  workingBottom.setExpanded(true);
   assert.match(plain(workingEarlier.render(200)), /\$ printf working-earlier/);
-  assert.doesNotMatch(plain(workingBottom.render(200)), /\$ printf working-bottom/);
+  assert.match(plain(workingBottom.render(200)), /\$ printf working-bottom/);
+  t.mock.timers.tick(5_000);
+  assert.match(plain(workingEarlier.render(200)), /\$ printf working-earlier/);
+  assert.match(plain(workingBottom.render(200)), /\$ printf working-bottom/);
   workingBottom.updateResult({
     content: [{ type: "text", text: "working-bottom complete" }],
     details: {},
     isError: false,
   });
-  assert.doesNotMatch(plain(workingEarlier.render(200)), /\$ printf working-earlier/);
+  assert.match(plain(workingEarlier.render(200)), /\$ printf working-earlier/);
+  t.mock.timers.reset();
   await harness.registeredCommands.get("sections").handler("", harness.ctx);
   const workingSection = harness.getCustomComponent().sections.find(
     (section) => section.kind === "tools" && section.label === "Act · Ran · 3 actions",
@@ -1046,6 +1095,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     details: {},
     isError: true,
   });
+  failedTool.setExpanded(false);
   const failedToolOutput = plain(failedTool.render(200));
   assert.match(failedToolOutput, /▸ Plan · Explored/);
   assert.match(failedToolOutput, /failed/);
@@ -1371,8 +1421,6 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
             harness.ui,
             harness.ctx.cwd,
           );
-          component.markExecutionStarted();
-          component.setArgsComplete();
           if (toolCall.id !== "historical-tool") {
             component.updateResult({
               content: [{ type: "text", text: "complete" }],
@@ -1465,7 +1513,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   });
   assert.deepEqual(JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")), {
     enabled: false,
-    patchesVersion: "0.80.6",
+    patchesVersion: "0.80.7",
     workingDetailMode: "compact",
     transcriptSpacing: "separated",
   });
@@ -1479,7 +1527,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   assert.equal(reloadHarness.getHiddenThinkingLabel(), "Thinking hidden · Ctrl+T to show");
   assert.deepEqual(JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")), {
     enabled: true,
-    patchesVersion: "0.80.6",
+    patchesVersion: "0.80.7",
     workingDetailMode: "compact",
     transcriptSpacing: "separated",
   });
@@ -1586,7 +1634,7 @@ test("startup render benchmark", {
   });
 
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
-    patchesVersion: "0.80.6",
+    patchesVersion: "0.80.7",
   }));
   const harness = createExtensionHarness();
   glanceUi(harness.pi);
@@ -1654,8 +1702,6 @@ test("startup render benchmark", {
             harness.ui,
             harness.ctx.cwd,
           );
-          component.markExecutionStarted();
-          component.setArgsComplete();
           component.updateResult({
             // Realistic multi-line output so the expanded (Ctrl+O) render cost is
             // representative; collapsed compact rendering ignores the body.

@@ -2,6 +2,7 @@ import { loadGlanceUiConfig, saveGlanceUiConfig } from "./config.js";
 import { activityPhaseForTool, compactWhitespace, compatibilityError, toolCategory } from "./format.js";
 import { loadRunningPiRuntime } from "./pi-runtime.js";
 import { compactDefinition } from "./tools.js";
+import { clearAutoWorkingDetailTimers } from "./patches/tools.js";
 import { ToolTimeline } from "./timeline.js";
 import { SectionController, SectionNavigator } from "./ui/sections.js";
 import { SettingsPanel } from "./ui/settings-panel.js";
@@ -37,7 +38,7 @@ export function rebuildActionSections({ timeline, sectionController, sessionMana
 }
 
 const SHARED_RUNTIME_STATE = Symbol.for("pi-compact-ui.shared-runtime-state");
-const SUPPORTED_PATCH_VERSIONS = new Set(["0.80.6"]);
+const SUPPORTED_PATCH_VERSIONS = new Set(["0.80.7"]);
 const WORKING_DETAIL_MODES = new Set(["auto", "compact", "expanded", "hidden"]);
 const TRANSCRIPT_SPACING_MODES = new Set(["dense", "separated"]);
 
@@ -166,7 +167,7 @@ export default function glanceUi(pi) {
     transcriptSpacing,
   });
   const workingDetailEffects = {
-    auto: "only the bottom-most running tool stays compact",
+    auto: "tools stay expanded while running and for 5s after the completed result renders",
     compact: "running tools stay compact",
     expanded: "running tools follow Ctrl+O",
     hidden: "running tools appear when they finish",
@@ -352,6 +353,7 @@ export default function glanceUi(pi) {
   });
 
   pi.on("session_shutdown", (_event, ctx) => {
+    clearAutoWorkingDetailTimers();
     ctx.ui.setHiddenThinkingLabel();
   });
 
@@ -451,9 +453,11 @@ export default function glanceUi(pi) {
   };
 
   const applyWorkingDetail = async (value, ctx) => {
+    clearAutoWorkingDetailTimers();
     workingDetailMode = value;
     sharedRuntime.workingDetailMode = value;
     const saved = persistSettings(ctx);
+    ctx.ui.requestRender?.();
     ctx.ui.notify(
       `Glance UI working-detail: ${value} · ${workingDetailEffects[value]} · ${saved ? "saved" : "session only"}`,
       saved ? "info" : "warning",

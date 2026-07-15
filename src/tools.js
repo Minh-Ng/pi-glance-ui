@@ -1,3 +1,5 @@
+import { Box } from "@earendil-works/pi-tui";
+
 import {
   activityPhaseForTool,
   formatDuration,
@@ -37,7 +39,19 @@ export function compactDefinition(original, timeline, isEnabled) {
           lastComponent: context.state.compactExpandedCallComponent,
         });
         context.state.compactExpandedCallComponent = component;
-        return new VerticallyTrimmed(stripVerticalPadding(component));
+        const backgroundColor = context.isPartial
+          ? "toolPendingBg"
+          : context.isError ? "toolErrorBg" : "toolSuccessBg";
+        let frame = context.state.compactExpandedFrame;
+        if (!frame) {
+          frame = new Box(1, 1, (text) => theme.bg(backgroundColor, text));
+          context.state.compactExpandedFrame = frame;
+        } else {
+          frame.setBgFn((text) => theme.bg(backgroundColor, text));
+          frame.clear();
+        }
+        frame.addChild(new VerticallyTrimmed(stripVerticalPadding(component)));
+        return frame;
       }
 
       const state = context.state;
@@ -89,7 +103,13 @@ export function compactDefinition(original, timeline, isEnabled) {
           lastComponent: context.state.compactExpandedResultComponent,
         });
         context.state.compactExpandedResultComponent = component;
-        return new VerticallyTrimmed(stripVerticalPadding(component));
+        const renderedResult = new VerticallyTrimmed(stripVerticalPadding(component));
+        const frame = context.state.compactExpandedFrame;
+        if (frame) {
+          frame.addChild(renderedResult);
+          return new Empty();
+        }
+        return renderedResult;
       }
       return new Empty();
     },

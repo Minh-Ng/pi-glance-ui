@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { tmpdir } from "node:os";
@@ -9,6 +9,9 @@ import { test } from "node:test";
 
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const codingAgentEntry = fileURLToPath(import.meta.resolve("@earendil-works/pi-coding-agent"));
+const codingAgentVersion = JSON.parse(
+  readFileSync(resolve(dirname(codingAgentEntry), "..", "package.json"), "utf8"),
+).version;
 const piCli = resolve(dirname(codingAgentEntry), "cli.js");
 
 function isolatedEnvironment(home) {
@@ -123,6 +126,59 @@ test("a fresh Pi home installs and starts Glance UI successfully", async (t) => 
   const config = JSON.parse(readFileSync(env.PI_GLANCE_UI_CONFIG, "utf8"));
   assert.equal(config.enabled, true);
   assert.equal(config.patchesVersion, undefined, "fresh installs must not imply patch consent");
+
+  child.kill();
+});
+
+test("layout patches start when a production package has no dev dependencies", async (t) => {
+  const home = mkdtempSync(resolve(tmpdir(), "pi-glance-ui-production-"));
+  const packageRoot = resolve(home, "glance-package");
+  const agentRoot = resolve(home, ".pi", "agent");
+  const env = isolatedEnvironment(home);
+  let child;
+  t.after(async () => {
+    if (child?.exitCode === null && child.signalCode === null) {
+      child.kill();
+      await once(child, "exit");
+    }
+    rmSync(home, { recursive: true, force: true });
+  });
+
+  mkdirSync(packageRoot, { recursive: true });
+  cpSync(resolve(projectRoot, "src"), resolve(packageRoot, "src"), { recursive: true });
+  cpSync(resolve(projectRoot, "package.json"), resolve(packageRoot, "package.json"));
+  mkdirSync(agentRoot, { recursive: true });
+  writeFileSync(
+    resolve(agentRoot, "settings.json"),
+    JSON.stringify({ packages: [packageRoot] }),
+  );
+  writeFileSync(
+    env.PI_GLANCE_UI_CONFIG,
+    JSON.stringify({ enabled: true, patchesVersion: codingAgentVersion }),
+  );
+
+  child = spawn(process.execPath, [piCli, "--mode", "rpc", "--no-session"], {
+    cwd: home,
+    env,
+    stdio: ["pipe", "pipe", "pipe"],
+  });
+
+  const requestId = "glance-ui-production-startup";
+  child.stdin.write(`${JSON.stringify({ id: requestId, type: "get_state" })}\n`);
+  const { message, messages, stderr } = await waitForRpcResponse(child, requestId);
+
+  assert.equal(message.success, true, JSON.stringify(message));
+  assert.equal(
+    messages.some(
+      (entry) => entry.type === "extension_ui_request"
+        && entry.method === "notify"
+        && entry.notifyType === "warning"
+        && entry.message?.startsWith("Glance UI: layout extras unavailable"),
+    ),
+    false,
+    "layout patches tried to resolve a package-local dev dependency",
+  );
+  assert.equal(stderr, "", `Pi emitted startup errors:\n${stderr}`);
 
   child.kill();
 });
