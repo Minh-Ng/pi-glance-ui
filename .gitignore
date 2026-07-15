@@ -1,11 +1,28 @@
+# Dependencies, coverage, and package artifacts
 node_modules/
-*.tgz
-.pi/
 coverage/
+dist/
+*.tgz
 
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local environment and credentials
 .env
 .env.*
 !.env.example
 .npmrc
 *.pem
 *.key
+
+# Local Pi, editor, and OS metadata
+.pi/
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store

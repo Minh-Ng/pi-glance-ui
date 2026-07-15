@@ -58,7 +58,7 @@ A later global toggle clears the relevant local override. Expanded built-in tool
 /glance-ui working-detail hidden
 ```
 
-- `auto` keeps only the bottom-most running tool compact.
+- `auto` keeps a tool expanded while it runs and for five seconds after its completed result first renders in full, then compacts it. An explicit `Ctrl+O` expansion overrides automatic compaction until detail is collapsed again.
 - `compact` keeps running tools compact, except an explicit section expansion.
 - `expanded` makes running tools follow `Ctrl+O`.
 - `hidden` omits active rows until completion.
@@ -93,7 +93,7 @@ The persisted file uses this shape:
 ```json
 {
   "enabled": true,
-  "patchesVersion": "0.80.6",
+  "patchesVersion": "0.80.7",
   "workingDetailMode": "auto",
   "transcriptSpacing": "dense"
 }
@@ -120,8 +120,8 @@ After `/glance-ui patches on` is confirmed for the running Pi version, Glance UI
 
 The current release line requires:
 
-- `@earendil-works/pi-coding-agent` 0.80.6
-- `@earendil-works/pi-tui` 0.80.6
+- `@earendil-works/pi-coding-agent` 0.80.7
+- `@earendil-works/pi-tui` 0.80.7
 
 Glance UI wraps public built-in tool definitions, but some presentation features require private Pi renderer hooks. Private paths can change between Pi releases.
 

@@ -21,8 +21,8 @@ Glance UI changes transcript presentation only. It does not change how tools exe
 ## Requirements
 
 - Node.js 22.19.0 or newer
-- `@earendil-works/pi-coding-agent` 0.80.6
-- `@earendil-works/pi-tui` 0.80.6
+- `@earendil-works/pi-coding-agent` 0.80.7
+- `@earendil-works/pi-tui` 0.80.7
 
 ## Install
 
@@ -57,7 +57,7 @@ The command asks for explicit consent for the exact installed Pi version, probes
 
 The section navigator uses a narrow list and larger detail pane across 85% of the terminal height. Press lowercase `f` to cycle filters such as Plan, Implement, Verify, and Thinking. Use Left/Right or Tab to focus a pane, Up/Down to select or scroll one line, Page Up/Page Down to scroll detail by page, Enter or Space to toggle the transcript section, and Escape to close.
 
-Running tools use `auto` detail by default: the bottom-most running tool stays compact and completed output follows `Ctrl+O`. Other modes are covered in the [Power User Guide](docs/power-user-guide.md#running-tools).
+Running tools use `auto` detail by default: a tool remains expanded while running and for five seconds after its completed result first renders in full; later completed output follows `Ctrl+O`. Other modes are covered in the [Power User Guide](docs/power-user-guide.md#running-tools).
 
 Transcript spacing is configurable: `transcript-spacing dense` keeps contiguous Thinking/action clusters tight with only outer spacing, while `separated` places a blank before each Thinking block. See the [Power User Guide](docs/power-user-guide.md#transcript-spacing).
 

@@ -4,6 +4,9 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+- Validate private renderer patches against Pi 0.80.7 and update the exact compatibility requirement.
+- Keep `working-detail auto` tools expanded while running and for five seconds after their completed result first renders in full. Manual mode changes, session shutdown, and hot reload clean up pending timers.
+
 ## 0.2.9
 
 - Clarify section filtering with an explicit `Filter:` header and a spaced lowercase `f: cycle filter` footer hint.

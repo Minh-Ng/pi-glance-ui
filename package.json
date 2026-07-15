@@ -49,11 +49,11 @@
     "prepublishOnly": "npm run check && npm test"
   },
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "0.80.6",
-    "@earendil-works/pi-tui": "0.80.6"
+    "@earendil-works/pi-coding-agent": "0.80.7",
+    "@earendil-works/pi-tui": "0.80.7"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "0.80.6",
-    "@earendil-works/pi-tui": "0.80.6"
+    "@earendil-works/pi-coding-agent": "0.80.7",
+    "@earendil-works/pi-tui": "0.80.7"
   }
 }

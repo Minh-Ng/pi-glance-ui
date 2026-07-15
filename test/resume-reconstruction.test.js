@@ -53,7 +53,7 @@ test("resume replay stays compact before the replacement session_start", async (
   process.env.PI_GLANCE_UI_CONFIG = join(configDirectory, "glance-ui.json");
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
     enabled: true,
-    patchesVersion: "0.80.6",
+    patchesVersion: "0.80.7",
   }));
   t.after(() => {
     if (previousConfigPath === undefined) delete process.env.PI_GLANCE_UI_CONFIG;
@@ -142,8 +142,6 @@ test("resume replay stays compact before the replacement session_start", async (
             initialHarness.ui,
             process.cwd(),
           );
-          toolComponent.markExecutionStarted();
-          toolComponent.setArgsComplete();
         } else if (item.role === "toolResult") {
           toolComponent.updateResult(item);
         }
