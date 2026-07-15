@@ -3,10 +3,16 @@ import { pathToFileURL } from "node:url";
 
 export async function patchCompactMarkdown(codingAgentEntryUrl, isEnabled, transaction) {
   const codingAgentRequire = createRequire(codingAgentEntryUrl);
-  const tuiEntryUrls = new Set([
-    import.meta.resolve("@earendil-works/pi-tui"),
-    pathToFileURL(codingAgentRequire.resolve("@earendil-works/pi-tui")).href,
-  ]);
+  const tuiEntryUrls = new Set();
+  try {
+    // Development installs may have a second, package-local TUI instance.
+    // Production git installs omit dev dependencies, so this candidate is optional.
+    tuiEntryUrls.add(import.meta.resolve("@earendil-works/pi-tui"));
+  } catch (error) {
+    if (error?.code !== "ERR_MODULE_NOT_FOUND") throw error;
+  }
+  // The running coding-agent dependency is authoritative and is always patched.
+  tuiEntryUrls.add(pathToFileURL(codingAgentRequire.resolve("@earendil-works/pi-tui")).href);
   for (const tuiEntryUrl of tuiEntryUrls) {
     await patchCompactMarkdownModule(tuiEntryUrl, isEnabled, transaction);
   }
