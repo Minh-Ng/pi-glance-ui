@@ -21,13 +21,13 @@ Glance UI changes transcript presentation only. It does not change how tools exe
 ## Requirements
 
 - Node.js 22.19.0 or newer
-- `@earendil-works/pi-coding-agent` 0.80.7
-- `@earendil-works/pi-tui` 0.80.7
+- `@earendil-works/pi-coding-agent` 0.80.8 or newer
+- `@earendil-works/pi-tui` 0.80.8 or newer
 
 ## Install
 
 ```bash
-pi install git:github.com/Minh-Ng/pi-glance-ui@v0.2.10
+pi install git:github.com/Minh-Ng/pi-glance-ui@v0.2.11
 ```
 
 Reload Pi after installation, then enable the version-scoped patches:
@@ -39,7 +39,7 @@ Reload Pi after installation, then enable the version-scoped patches:
 > [!IMPORTANT]
 > The patches are required for the complete Glance UI experience. Without them, only public compact rendering for built-in tools is available. Thinking trees and `Ctrl+T`, artifacts/custom messages, assistant/runtime error sections, rendererless custom tools such as TaskCreate/TaskUpdate, transcript spacing, and the complete `Ctrl+Shift+O` viewer all depend on patched Pi renderer hooks.
 
-The command asks for explicit consent for the exact installed Pi version, probes compatibility transactionally, activates immediately, and persists the approved version. No Pi files are modified. Verify activation with `/glance-ui settings`; it must report `patches: on for Pi <version>`. A Pi upgrade invalidates prior approval until Glance UI explicitly supports and you approve the new version.
+The command asks for explicit consent for the exact installed Pi version, probes compatibility transactionally, activates immediately, and persists the approved version. No Pi files are modified. Verify activation with `/glance-ui settings`; it must report `patches: on for Pi <version>`. A Pi upgrade invalidates prior approval and requires approval for the new version; releases newer than the minimum are allowed to try the guarded probes even when Glance UI has not explicitly validated them yet.
 
 ## Everyday controls
 

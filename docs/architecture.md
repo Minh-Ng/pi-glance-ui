@@ -44,7 +44,7 @@ Replacing these rows with extension-owned messages or widgets is not equivalent:
 
 ## Patch safety contract
 
-Private paths are unsupported and can change in any Pi release. Glance UI therefore treats each supported Pi version as an explicit compatibility target:
+Private paths are unsupported and can change in any Pi release. Glance UI therefore sets a minimum compatible Pi version, requires consent for the exact running version, and transactionally probes every attempted installation:
 
 - Fresh installs use only public compact tool definitions; private patch modules are dynamically imported only after `/glance-ui patches on` confirmation.
 - Consent is stored for one exact Pi version. A missing or mismatched `patchesVersion` leaves private patches dormant.

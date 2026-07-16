@@ -4,7 +4,7 @@ This guide covers detailed display behavior and configuration. Most users only n
 
 ## Required patched mode
 
-Run `/glance-ui patches on` and approve the exact supported Pi version to activate the complete UI. Confirm `/glance-ui settings` reports `patches: on for Pi <version>`. Without patched mode, Glance UI is limited to public compact rendering for built-in tools: Thinking, artifacts/custom messages, assistant/runtime errors, rendererless custom tools, and the complete section viewer are unavailable. Approval is invalidated by a Pi version change and must not be copied between installations.
+Run `/glance-ui patches on` and approve the exact installed Pi version to activate the complete UI. Confirm `/glance-ui settings` reports `patches: on for Pi <version>`. Without patched mode, Glance UI is limited to public compact rendering for built-in tools: Thinking, artifacts/custom messages, assistant/runtime errors, rendererless custom tools, and the complete section viewer are unavailable. Approval is invalidated by a Pi version change and must not be copied between installations.
 
 ## Compact transcript behavior
 
@@ -93,7 +93,7 @@ The persisted file uses this shape:
 ```json
 {
   "enabled": true,
-  "patchesVersion": "0.80.7",
+  "patchesVersion": "0.80.8",
   "workingDetailMode": "auto",
   "transcriptSpacing": "dense"
 }
@@ -120,11 +120,11 @@ After `/glance-ui patches on` is confirmed for the running Pi version, Glance UI
 
 The current release line requires:
 
-- `@earendil-works/pi-coding-agent` 0.80.7
-- `@earendil-works/pi-tui` 0.80.7
+- `@earendil-works/pi-coding-agent` 0.80.8 or newer
+- `@earendil-works/pi-tui` 0.80.8 or newer
 
 Glance UI wraps public built-in tool definitions, but some presentation features require private Pi renderer hooks. Private paths can change between Pi releases.
 
-Private patch modules are loaded only after confirmation. On later starts, compatibility probes run during `session_start` only when stored consent exactly matches the running Pi version. If a private hook is unavailable, Glance UI warns instead of failing the session. Private prototype installation is transactional: a failed installer or probe restores every property descriptor captured earlier in that attempt, while compatible public tool rendering remains available.
+Private patch modules are loaded only after confirmation. On later starts, compatibility probes run during `session_start` only when stored consent exactly matches the running Pi version. Pi releases at or above the minimum may attempt the guarded probes even before Glance UI explicitly validates them. If a private hook is unavailable, Glance UI warns instead of failing the session. Private prototype installation is transactional: a failed installer or probe restores every property descriptor captured earlier in that attempt, while compatible public tool rendering remains available.
 
 For implementation details and upgrade checks, see the [Architecture and Maintenance Guide](architecture.md).
