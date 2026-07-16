@@ -78,7 +78,7 @@ test("a text-bearing message gains one blank line before a following action grou
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
     enabled: true,
-    patchesVersion: "0.80.7",
+    patchesVersion: "0.80.8",
     workingDetailMode: "auto",
   }));
 
@@ -143,7 +143,7 @@ test("compact assistant rendering preserves native text-bearing spacing", async 
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
     enabled: true,
-    patchesVersion: "0.80.7",
+    patchesVersion: "0.80.8",
     workingDetailMode: "auto",
   }));
 
@@ -264,7 +264,7 @@ test("live: prose→action separator lands in the same frame the tool row stream
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
     enabled: true,
-    patchesVersion: "0.80.7",
+    patchesVersion: "0.80.8",
     workingDetailMode: "auto",
   }));
 
@@ -338,7 +338,7 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
   });
 
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
-    patchesVersion: "0.80.7",
+    patchesVersion: "0.80.8",
   }));
   const target = harness();
   glanceUi(target.pi);

@@ -4,6 +4,10 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+## 0.2.11
+
+- Validate private renderer patches against Pi 0.80.8, set it as the minimum compatibility target, and allow later Pi releases to attempt the guarded transactional probes.
+
 ## 0.2.10
 
 - Keep private layout patches available in production git installs where Pi intentionally omits Glance UI's development dependencies.

@@ -136,7 +136,7 @@ test("private layout patches require explicit version-scoped consent", async (t)
     "public compact tool definitions should remain active",
   );
   assert.deepEqual(target.notifications.at(-1), {
-    message: "Glance UI: private patches remain off on Pi 0.80.7; approval was for Pi 0.80.6.",
+    message: "Glance UI: private patches remain off on Pi 0.80.8; approval was for Pi 0.80.6.",
     level: "warning",
   });
 
@@ -161,14 +161,14 @@ test("private layout patches require explicit version-scoped consent", async (t)
 
   await command("install-patch", target.ctx);
   assert.equal(target.confirmationRequests.length, 2);
-  assert.match(target.confirmationRequests[1].message, /in-memory prototype patches to Pi 0\.80\.7/);
+  assert.match(target.confirmationRequests[1].message, /guarded in-memory prototype patches to Pi 0\.80\.8/);
   assert.notEqual(AssistantMessageComponent.prototype.updateContent, nativeMethods.get(
     AssistantMessageComponent.prototype,
   ));
   assert.equal(target.getHiddenThinkingLabel(), "Thinking hidden · Ctrl+T to show");
-  assert.equal(JSON.parse(readFileSync(configPath, "utf8")).patchesVersion, "0.80.7");
+  assert.equal(JSON.parse(readFileSync(configPath, "utf8")).patchesVersion, "0.80.8");
   assert.deepEqual(target.notifications.at(-1), {
-    message: "Glance UI private patches: on for Pi 0.80.7 · saved",
+    message: "Glance UI private patches: on for Pi 0.80.8 · saved",
     level: "info",
   });
 

@@ -38,9 +38,24 @@ export function rebuildActionSections({ timeline, sectionController, sessionMana
 }
 
 const SHARED_RUNTIME_STATE = Symbol.for("pi-compact-ui.shared-runtime-state");
-const SUPPORTED_PATCH_VERSIONS = new Set(["0.80.7"]);
+const MINIMUM_PATCH_VERSION = [0, 80, 8];
+const MINIMUM_PATCH_VERSION_TEXT = MINIMUM_PATCH_VERSION.join(".");
 const WORKING_DETAIL_MODES = new Set(["auto", "compact", "expanded", "hidden"]);
 const TRANSCRIPT_SPACING_MODES = new Set(["dense", "separated"]);
+
+export function isPatchVersionSupported(version) {
+  if (typeof version !== "string") return false;
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/.exec(version);
+  if (!match) return false;
+
+  const current = match.slice(1, 4).map(Number);
+  for (let index = 0; index < MINIMUM_PATCH_VERSION.length; index += 1) {
+    if (current[index] !== MINIMUM_PATCH_VERSION[index]) {
+      return current[index] > MINIMUM_PATCH_VERSION[index];
+    }
+  }
+  return match[4] === undefined;
+}
 
 function requiresFreshContainer(current, fallback) {
   if (fallback instanceof Map) return !(current instanceof Map);
@@ -262,8 +277,11 @@ export default function glanceUi(pi) {
 
   const ensureLayoutPatch = async () => {
     const runtime = await ensureRunningPiRuntime();
-    if (!SUPPORTED_PATCH_VERSIONS.has(runtime.version)) {
-      return { ok: false, error: `Pi ${runtime.version} is not a tested patch target` };
+    if (!isPatchVersionSupported(runtime.version)) {
+      return {
+        ok: false,
+        error: `Pi ${runtime.version} does not satisfy the patch requirement >=${MINIMUM_PATCH_VERSION_TEXT}`,
+      };
     }
     if (!layoutPatch) {
       patchInstallInProgress = true;
@@ -416,9 +434,9 @@ export default function glanceUi(pi) {
       return;
     }
     const runtime = await ensureRunningPiRuntime();
-    if (!SUPPORTED_PATCH_VERSIONS.has(runtime.version)) {
+    if (!isPatchVersionSupported(runtime.version)) {
       ctx.ui.notify(
-        `Glance UI private patches are not available for untested Pi ${runtime.version}.`,
+        `Glance UI private patches require Pi >=${MINIMUM_PATCH_VERSION_TEXT}; found ${runtime.version}.`,
         "warning",
       );
       return;
@@ -429,7 +447,7 @@ export default function glanceUi(pi) {
     }
     const confirmed = await ctx.ui.confirm(
       "Enable private layout patches?",
-      `This applies tested in-memory prototype patches to Pi ${runtime.version}. No installed files are changed. Approval expires when Pi's version changes.`,
+      `This applies guarded in-memory prototype patches to Pi ${runtime.version}. Compatibility is probed before activation, no installed files are changed, and approval expires when Pi's version changes.`,
     );
     if (!confirmed) {
       ctx.ui.notify("Glance UI private patches remain off.", "info");
