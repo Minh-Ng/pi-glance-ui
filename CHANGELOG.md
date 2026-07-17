@@ -4,6 +4,10 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+## 0.2.13
+
+- Collapse transcript-level replay spacers immediately when Ctrl+T reveals previously hidden Thinking, preventing double blank rows in dense mode; cross the spacing matrix with shown and hidden Thinking states.
+
 ## 0.2.12
 
 - Collapse duplicate transcript gaps when hidden tool rows and hidden Thinking entries sit between assistant prose blocks.

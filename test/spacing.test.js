@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { stripVTControlCharacters } from "node:util";
+import { Spacer } from "@earendil-works/pi-tui";
 
 import glanceUi from "../src/index.js";
 import { removeBlankOnlyToolRows } from "../src/patches/tools.js";
@@ -453,56 +454,59 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
   ];
 
   for (const { label, create, blankRows } of boundaries) {
-    const liveChildren = [create()];
-    const liveMode = {
-      isInitialized: true,
-      footer: { invalidate() {} },
-      hideThinkingBlock: true,
-      hiddenThinkingLabel: "Thinking hidden",
-      outputPad: 1,
-      pendingTools: new Map(),
-      getMarkdownThemeWithSettings: () => undefined,
-      chatContainer: {
-        children: liveChildren,
-        addChild(component) {
-          this.children.push(component);
+    for (const hideThinkingBlock of [true, false]) {
+      const visibility = hideThinkingBlock ? "hidden" : "shown";
+      const liveChildren = [create()];
+      const liveMode = {
+        isInitialized: true,
+        footer: { invalidate() {} },
+        hideThinkingBlock,
+        hiddenThinkingLabel: "Thinking hidden",
+        outputPad: 1,
+        pendingTools: new Map(),
+        getMarkdownThemeWithSettings: () => undefined,
+        chatContainer: {
+          children: liveChildren,
+          addChild(component) {
+            this.children.push(component);
+          },
         },
-      },
-      ui: { requestRender() {} },
-    };
-    await InteractiveMode.prototype.handleEvent.call(liveMode, {
-      type: "message_start",
-      message: thinkingMessage,
-    });
+        ui: { requestRender() {} },
+      };
+      await InteractiveMode.prototype.handleEvent.call(liveMode, {
+        type: "message_start",
+        message: thinkingMessage,
+      });
 
-    const widths = [40, 80, 160];
-    const liveBlankRows = widths.map(
-      (width) => leadingBlankRows(liveMode.streamingComponent, width),
-    );
-
-    const reconstructedThinking = new AssistantMessageComponent(
-      thinkingMessage,
-      true,
-      undefined,
-      "Thinking hidden",
-    );
-    const reconstructedChildren = [create(), reconstructedThinking];
-    InteractiveMode.prototype.renderSessionEntries.call({
-      chatContainer: { children: reconstructedChildren },
-      renderSessionItems() {},
-    }, []);
-
-    for (const [index, width] of widths.entries()) {
-      assert.equal(
-        liveBlankRows[index],
-        blankRows,
-        `live ${label}→Thinking spacing at width ${width}`,
+      const widths = [40, 80, 160];
+      const liveBlankRows = widths.map(
+        (width) => leadingBlankRows(liveMode.streamingComponent, width),
       );
-      assert.equal(
-        leadingBlankRows(reconstructedThinking, width),
-        blankRows,
-        `reconstructed ${label}→Thinking spacing at width ${width}`,
+
+      const reconstructedThinking = new AssistantMessageComponent(
+        thinkingMessage,
+        hideThinkingBlock,
+        undefined,
+        "Thinking hidden",
       );
+      const reconstructedChildren = [create(), reconstructedThinking];
+      InteractiveMode.prototype.renderSessionEntries.call({
+        chatContainer: { children: reconstructedChildren },
+        renderSessionItems() {},
+      }, []);
+
+      for (const [index, width] of widths.entries()) {
+        assert.equal(
+          liveBlankRows[index],
+          blankRows,
+          `live ${visibility} ${label}→Thinking spacing at width ${width}`,
+        );
+        assert.equal(
+          leadingBlankRows(reconstructedThinking, width),
+          blankRows,
+          `reconstructed ${visibility} ${label}→Thinking spacing at width ${width}`,
+        );
+      }
     }
   }
 
@@ -553,22 +557,24 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
   assert.equal(leadingBlankRows(firstThinking, 80), 1, "dense cluster keeps its outer blank");
   assert.equal(leadingBlankRows(secondThinking, 80), 0, "dense tool→Thinking continuation is contiguous");
   for (const { label, create, denseBlankRows } of boundaries) {
-    const denseThinking = new AssistantMessageComponent(
-      thinkingMessage,
-      true,
-      undefined,
-      "Thinking hidden",
-    );
-    const denseChildren = [create(), denseThinking];
-    InteractiveMode.prototype.renderSessionEntries.call({
-      chatContainer: { children: denseChildren },
-      renderSessionItems() {},
-    }, []);
-    assert.equal(
-      leadingBlankRows(denseThinking, 80),
-      denseBlankRows,
-      `dense live/replay matrix: ${label}→Thinking`,
-    );
+    for (const hideThinkingBlock of [true, false]) {
+      const denseThinking = new AssistantMessageComponent(
+        thinkingMessage,
+        hideThinkingBlock,
+        undefined,
+        "Thinking hidden",
+      );
+      const denseChildren = [create(), denseThinking];
+      InteractiveMode.prototype.renderSessionEntries.call({
+        chatContainer: { children: denseChildren },
+        renderSessionItems() {},
+      }, []);
+      assert.equal(
+        leadingBlankRows(denseThinking, 80),
+        denseBlankRows,
+        `dense replay ${hideThinkingBlock ? "hidden" : "shown"}: ${label}→Thinking`,
+      );
+    }
   }
   assert.equal(
     JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")).transcriptSpacing,
@@ -746,6 +752,54 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
     leadingBlankRows(visibleCurrentThinking, 80),
     1,
     "hidden Thinking remains transparent to the preceding user boundary",
+  );
+
+  // Ctrl+T clears and rebuilds historical chat, then Pi re-adds the retained
+  // streaming component. The final normalization must run after that re-add so
+  // shown Thinking cannot combine native transcript and component spacers.
+  let rebuiltThinking;
+  const toggleChildren = [];
+  const streamingThinking = new AssistantMessageComponent(
+    thinkingMessage,
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const toggleMode = {
+    hideThinkingBlock: true,
+    settingsManager: { setHideThinkingBlock() {} },
+    chatContainer: {
+      children: toggleChildren,
+      clear() { this.children.length = 0; },
+      addChild(component) { this.children.push(component); },
+    },
+    rebuildChatFromMessages() {
+      rebuiltThinking = new AssistantMessageComponent(
+        thinkingMessage,
+        this.hideThinkingBlock,
+        undefined,
+        "Thinking hidden",
+      );
+      this.chatContainer.addChild(new UserMessageComponent("Ctrl+T replay boundary"));
+      this.chatContainer.addChild(new Spacer(1));
+      this.chatContainer.addChild(rebuiltThinking);
+    },
+    streamingComponent: streamingThinking,
+    streamingMessage: thinkingMessage,
+    showStatus() {},
+  };
+  InteractiveMode.prototype.toggleThinkingBlockVisibility.call(toggleMode);
+  assert.equal(toggleMode.hideThinkingBlock, false);
+  assert.equal(
+    toggleChildren.filter((child) => child instanceof Spacer).length
+      + leadingBlankRows(rebuiltThinking, 80),
+    1,
+    "Ctrl+T shown replay has one outer blank rather than two",
+  );
+  assert.equal(
+    leadingBlankRows(streamingThinking, 80),
+    0,
+    "re-added streaming Thinking remains inside the dense cluster",
   );
 
   await target.commands.get("glance-ui").handler(

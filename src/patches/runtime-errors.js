@@ -12,6 +12,9 @@ export async function patchCompactRuntimeErrors(
 ) {
   const baseHandleEventMethod = Symbol.for("pi-compact-ui.base-handle-event");
   const baseRenderSessionEntriesMethod = Symbol.for("pi-compact-ui.base-render-session-entries");
+  const baseToggleThinkingBlockVisibilityMethod = Symbol.for(
+    "pi-compact-ui.base-toggle-thinking-block-visibility",
+  );
   const baseShowErrorMethod = Symbol.for("pi-compact-ui.base-show-error");
   const baseShowWarningMethod = Symbol.for("pi-compact-ui.base-show-warning");
   let nextRuntimeNoticeId = 1;
@@ -31,6 +34,7 @@ export async function patchCompactRuntimeErrors(
   if (
     typeof prototype.handleEvent !== "function"
     || typeof prototype.renderSessionEntries !== "function"
+    || typeof prototype.toggleThinkingBlockVisibility !== "function"
     || typeof prototype.showError !== "function"
     || typeof prototype.showWarning !== "function"
   ) {
@@ -39,10 +43,12 @@ export async function patchCompactRuntimeErrors(
   transaction?.capture(prototype, [
     "handleEvent",
     "renderSessionEntries",
+    "toggleThinkingBlockVisibility",
     "showError",
     "showWarning",
     baseHandleEventMethod,
     baseRenderSessionEntriesMethod,
+    baseToggleThinkingBlockVisibilityMethod,
     baseShowErrorMethod,
     baseShowWarningMethod,
   ]);
@@ -50,12 +56,16 @@ export async function patchCompactRuntimeErrors(
   if (!prototype[baseRenderSessionEntriesMethod]) {
     prototype[baseRenderSessionEntriesMethod] = prototype.renderSessionEntries;
   }
+  if (!prototype[baseToggleThinkingBlockVisibilityMethod]) {
+    prototype[baseToggleThinkingBlockVisibilityMethod] = prototype.toggleThinkingBlockVisibility;
+  }
   if (!prototype[baseShowErrorMethod]) prototype[baseShowErrorMethod] = prototype.showError;
   if (!prototype[baseShowWarningMethod]) {
     prototype[baseShowWarningMethod] = prototype.showWarning;
   }
   const baseHandleEvent = prototype[baseHandleEventMethod];
   const baseRenderSessionEntries = prototype[baseRenderSessionEntriesMethod];
+  const baseToggleThinkingBlockVisibility = prototype[baseToggleThinkingBlockVisibilityMethod];
   const baseShowError = prototype[baseShowErrorMethod];
   const baseShowWarning = prototype[baseShowWarningMethod];
 
@@ -100,6 +110,12 @@ export async function patchCompactRuntimeErrors(
     } finally {
       timeline.finishTranscriptRebuild();
     }
+  };
+
+  prototype.toggleThinkingBlockVisibility = function compactToggleThinkingBlockVisibility() {
+    const result = baseToggleThinkingBlockVisibility.call(this);
+    if (isEnabled()) normalizeTranscriptSpacing(this.chatContainer?.children);
+    return result;
   };
 
   prototype.showError = function compactErrorBlock(errorMessage) {
