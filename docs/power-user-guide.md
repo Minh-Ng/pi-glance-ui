@@ -93,7 +93,7 @@ The persisted file uses this shape:
 ```json
 {
   "enabled": true,
-  "patchesVersion": "0.80.8",
+  "patchesVersion": "0.80.10",
   "workingDetailMode": "auto",
   "transcriptSpacing": "dense"
 }

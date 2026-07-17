@@ -78,7 +78,7 @@ test("a text-bearing message gains one blank line before a following action grou
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
     enabled: true,
-    patchesVersion: "0.80.8",
+    patchesVersion: "0.80.10",
     workingDetailMode: "auto",
   }));
 
@@ -130,6 +130,32 @@ test("a text-bearing message gains one blank line before a following action grou
   assert.equal(trailingSpacers(prose), 1);
   normalize([prose]);
   assert.equal(trailingSpacers(prose), 0, "separator removed when the message is last");
+
+  const proseBeforeHiddenTool = new AssistantMessageComponent(
+    { role: "assistant", content: [{ type: "text", text: "Before hidden work." }], stopReason: "stop" },
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  const hiddenTool = {
+    constructor: { name: "ToolExecutionComponent" },
+    [Symbol.for("pi-glance-ui:tool-has-visible-rows")]: false,
+  };
+  const proseAfterHiddenTool = new AssistantMessageComponent(
+    { role: "assistant", content: [{ type: "text", text: "After hidden work." }], stopReason: "stop" },
+    true,
+    undefined,
+    "Thinking hidden",
+  );
+  normalize([proseBeforeHiddenTool, hiddenTool, proseAfterHiddenTool]);
+  assert.equal(trailingSpacers(proseBeforeHiddenTool), 1, "pre-render action boundary is reserved");
+  proseAfterHiddenTool.render(80);
+  assert.equal(trailingSpacers(proseBeforeHiddenTool), 0, "blank-only tool releases the extra boundary");
+  assert.equal(
+    trailingBlankRows(proseBeforeHiddenTool, 80) + leadingBlankRows(proseAfterHiddenTool, 80),
+    1,
+    "hidden work between prose blocks renders exactly one blank",
+  );
 });
 
 test("compact assistant rendering preserves native text-bearing spacing", async (t) => {
@@ -143,7 +169,7 @@ test("compact assistant rendering preserves native text-bearing spacing", async 
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
     enabled: true,
-    patchesVersion: "0.80.8",
+    patchesVersion: "0.80.10",
     workingDetailMode: "auto",
   }));
 
@@ -264,7 +290,7 @@ test("live: prose→action separator lands in the same frame the tool row stream
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
     enabled: true,
-    patchesVersion: "0.80.8",
+    patchesVersion: "0.80.10",
     workingDetailMode: "auto",
   }));
 
@@ -338,7 +364,7 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
   });
 
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
-    patchesVersion: "0.80.8",
+    patchesVersion: "0.80.10",
   }));
   const target = harness();
   glanceUi(target.pi);
@@ -662,8 +688,8 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
   );
   assert.equal(
     leadingBlankRows(afterProseTools, 80),
-    0,
-    "assistant prose→hidden tools→Thinking does not add a second blank",
+    1,
+    "assistant prose→hidden tools→Thinking keeps one boundary on Thinking",
   );
   const intermediateBlankRows = proseReplayChildren.slice(1, -1)
     .flatMap((component) => component.render?.(80) ?? [])
@@ -729,8 +755,8 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
   assert.equal(leadingBlankRows(secondThinking, 80), 1, "separated mode restores the blank after a visible tool");
   assert.equal(
     leadingBlankRows(afterProseTools, 80),
-    0,
-    "separated mode deduplicates prose spacing through hidden tools",
+    1,
+    "separated mode moves the single boundary onto Thinking after hidden tools",
   );
   assert.equal(
     trailingBlankRows(finalProseWithTool, 80)

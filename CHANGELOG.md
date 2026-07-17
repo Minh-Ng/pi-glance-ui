@@ -4,6 +4,11 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+## 0.2.12
+
+- Collapse duplicate transcript gaps when hidden tool rows and hidden Thinking entries sit between assistant prose blocks.
+- Validate the private renderer patches and development test matrix against Pi 0.80.10.
+
 ## 0.2.11
 
 - Validate private renderer patches against Pi 0.80.8, set it as the minimum compatibility target, and allow later Pi releases to attempt the guarded transactional probes.

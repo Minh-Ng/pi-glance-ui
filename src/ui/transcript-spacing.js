@@ -118,6 +118,32 @@ export class TranscriptSpacer {
     }
   }
 
+  // Tool components decide whether they have visible rows during render. Once a
+  // later assistant component renders, reconcile the earlier prose separator
+  // using that live result. Without this pass, hidden tool rows (often mixed
+  // with hidden Thinking-only assistants) leave their prose separator beside
+  // the next assistant's native leading blank, producing a double gap.
+  reconcilePrecedingActionSeparator(component, width) {
+    let previous = component?.[this.previousContent];
+    let successorTool;
+    let hasVisibleTool = false;
+    while (previous) {
+      if (this.isToolComponent(previous)) {
+        successorTool = previous;
+        if (this.isVisiblyRenderedTool(previous, width)) hasVisibleTool = true;
+        previous = previous[this.previousContent];
+        continue;
+      }
+      if (this.isTransparentComponent(previous)) {
+        previous = previous[this.previousContent];
+        continue;
+      }
+      break;
+    }
+    if (!successorTool || !previous) return;
+    this.applyActionSeparator(previous, hasVisibleTool ? successorTool : undefined);
+  }
+
   // Normalize Thinking children inside one assistant component. Dense mode
   // removes only Thinking→Thinking interior blanks; text still breaks the
   // cluster and receives one blank on either side.
