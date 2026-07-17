@@ -390,6 +390,7 @@ export async function patchHiddenThinkingLayout(
           this,
           (child) => child?.[compactThinkingRawText] !== undefined,
         );
+        transcriptSpacer.reconcilePrecedingActionSeparator(this, width);
         transcriptSpacer.refreshThinking(this, width);
       }
       return baseRender.call(this, width);

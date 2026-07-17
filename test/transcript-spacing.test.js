@@ -57,6 +57,36 @@ test("separator is removed when the successor is not a tool or is absent", () =>
   assert.equal(trailing(p), false, "removed when prose is last");
 });
 
+test("hidden tools and Thinking do not leave a double gap before later prose", () => {
+  const s = spacer("dense");
+  const priorProse = prose();
+  const hiddenTool = tool(false);
+  const hiddenThinking = {
+    transparent: true,
+    contentContainer: { children: [] },
+  };
+  const laterProse = {
+    type: "prose-target",
+    contentContainer: { children: [new Spacer(1), {}] },
+  };
+
+  s.normalize([priorProse, hiddenTool, hiddenThinking, laterProse]);
+  assert.equal(trailing(priorProse), true, "normalization initially reserves the action boundary");
+  s.reconcilePrecedingActionSeparator(laterProse, 80);
+  assert.equal(trailing(priorProse), false, "blank-only action rows release their separator");
+  assert.equal(leading(laterProse), true, "the later prose keeps its native single boundary");
+
+  const visibleProse = prose();
+  const visibleTool = tool(true);
+  const afterVisibleTool = {
+    type: "prose-target",
+    contentContainer: { children: [new Spacer(1), {}] },
+  };
+  s.normalize([visibleProse, visibleTool, afterVisibleTool]);
+  s.reconcilePrecedingActionSeparator(afterVisibleTool, 80);
+  assert.equal(trailing(visibleProse), true, "a visible action group keeps its outer separator");
+});
+
 test("thinking-only keeps exactly one leading blank after any visible block", () => {
   const s = spacer();
   const afterProse = thinking(false);

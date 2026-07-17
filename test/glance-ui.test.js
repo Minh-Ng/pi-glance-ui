@@ -115,19 +115,19 @@ test("glance-ui config persists valid settings and tolerates malformed data", ()
   try {
     saveGlanceUiConfig({
       enabled: false,
-      patchesVersion: "0.80.8",
+      patchesVersion: "0.80.10",
       workingDetailMode: "hidden",
       transcriptSpacing: "dense",
     }, path);
     assert.deepEqual(loadGlanceUiConfig(path), {
       enabled: false,
-      patchesVersion: "0.80.8",
+      patchesVersion: "0.80.10",
       workingDetailMode: "hidden",
       transcriptSpacing: "dense",
     });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), {
       enabled: false,
-      patchesVersion: "0.80.8",
+      patchesVersion: "0.80.10",
       workingDetailMode: "hidden",
       transcriptSpacing: "dense",
     });
@@ -157,7 +157,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     rmSync(configDirectory, { recursive: true, force: true });
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
-    patchesVersion: "0.80.8",
+    patchesVersion: "0.80.10",
   }));
   const harness = createExtensionHarness();
   glanceUi(harness.pi);
@@ -185,7 +185,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   ]);
   assert.deepEqual(JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")), {
     enabled: true,
-    patchesVersion: "0.80.8",
+    patchesVersion: "0.80.10",
     workingDetailMode: "auto",
     transcriptSpacing: "separated",
   });
@@ -194,7 +194,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     message: [
       "Glance UI settings",
       "enabled: on (on|off) — compact tool rendering is active",
-      "patches: on for Pi 0.80.8 (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer",
+      "patches: on for Pi 0.80.10 (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer",
       "working-detail: auto (auto|compact|expanded|hidden) — tools stay expanded while running and for 5s after the completed result renders",
       "transcript-spacing: separated (dense|separated) — every Thinking block has a leading blank",
       "Change: /glance-ui settings <name> <value>",
@@ -1525,7 +1525,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   });
   assert.deepEqual(JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")), {
     enabled: false,
-    patchesVersion: "0.80.8",
+    patchesVersion: "0.80.10",
     workingDetailMode: "compact",
     transcriptSpacing: "separated",
   });
@@ -1539,7 +1539,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   assert.equal(reloadHarness.getHiddenThinkingLabel(), "Thinking hidden · Ctrl+T to show");
   assert.deepEqual(JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")), {
     enabled: true,
-    patchesVersion: "0.80.8",
+    patchesVersion: "0.80.10",
     workingDetailMode: "compact",
     transcriptSpacing: "separated",
   });
@@ -1646,7 +1646,7 @@ test("startup render benchmark", {
   });
 
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
-    patchesVersion: "0.80.8",
+    patchesVersion: "0.80.10",
   }));
   const harness = createExtensionHarness();
   glanceUi(harness.pi);
