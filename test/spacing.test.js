@@ -151,7 +151,12 @@ test("a text-bearing message gains one blank line before a following action grou
   normalize([proseBeforeHiddenTool, hiddenTool, proseAfterHiddenTool]);
   assert.equal(trailingSpacers(proseBeforeHiddenTool), 1, "pre-render action boundary is reserved");
   proseAfterHiddenTool.render(80);
-  assert.equal(trailingSpacers(proseBeforeHiddenTool), 0, "blank-only tool releases the extra boundary");
+  assert.equal(
+    trailingSpacers(proseBeforeHiddenTool),
+    1,
+    "rendering later prose must not rewrite the earlier action boundary",
+  );
+  assert.equal(leadingBlankRows(proseAfterHiddenTool, 80), 0, "later prose suppresses its duplicate native boundary");
   assert.equal(
     trailingBlankRows(proseBeforeHiddenTool, 80) + leadingBlankRows(proseAfterHiddenTool, 80),
     1,
@@ -694,8 +699,8 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
   );
   assert.equal(
     leadingBlankRows(afterProseTools, 80),
-    1,
-    "assistant prose→hidden tools→Thinking keeps one boundary on Thinking",
+    0,
+    "assistant prose→hidden tools→Thinking does not duplicate the stable prose boundary",
   );
   const intermediateBlankRows = proseReplayChildren.slice(1, -1)
     .flatMap((component) => component.render?.(80) ?? [])
@@ -809,8 +814,8 @@ test("Thinking keeps exactly one blank across transcript boundaries live and aft
   assert.equal(leadingBlankRows(secondThinking, 80), 1, "separated mode restores the blank after a visible tool");
   assert.equal(
     leadingBlankRows(afterProseTools, 80),
-    1,
-    "separated mode moves the single boundary onto Thinking after hidden tools",
+    0,
+    "separated mode also keeps the single stable boundary on prose after hidden tools",
   );
   assert.equal(
     trailingBlankRows(finalProseWithTool, 80)

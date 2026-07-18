@@ -58,7 +58,8 @@ export class TranscriptSpacer {
   // Dense mode additionally removes blanks inside visible Thinking/tool clusters.
   refreshThinking(component, width) {
     const children = component?.contentContainer?.children;
-    if (!Array.isArray(children) || !this.startsWithThinkingComponent(component)) return;
+    if (!Array.isArray(children)) return;
+    const startsThinking = this.startsWithThinkingComponent(component);
     const dense = this.getTranscriptSpacingMode() === "dense";
     let previous = component[this.previousContent];
     let suppressLeadingSpacer = false;
@@ -67,14 +68,14 @@ export class TranscriptSpacer {
         suppressLeadingSpacer = true;
         break;
       }
-      if (dense && this.endsWithThinkingComponent(previous)) {
+      if (startsThinking && dense && this.endsWithThinkingComponent(previous)) {
         suppressLeadingSpacer = true;
         break;
       }
       if (this.isToolComponent(previous)) {
         const visible = width !== undefined && this.isVisiblyRenderedTool(previous, width);
         if (visible) {
-          suppressLeadingSpacer = dense;
+          suppressLeadingSpacer = startsThinking && dense;
           break;
         }
         previous = previous[this.previousContent];
@@ -86,6 +87,10 @@ export class TranscriptSpacer {
       }
       break;
     }
+    // A prose separator before only hidden rows already owns the boundary for
+    // any following assistant content. Remove the current component's native
+    // leading spacer rather than mutating the earlier, already-rendered prose.
+    if (!startsThinking && !suppressLeadingSpacer) return;
     component[this.suppressLeadingSpacer] = suppressLeadingSpacer;
 
     let leadingCount = 0;
@@ -116,32 +121,6 @@ export class TranscriptSpacer {
       if (this.isSpacer(last)) container.children.pop();
       component[this.trailingSeparator] = false;
     }
-  }
-
-  // Tool components decide whether they have visible rows during render. Once a
-  // later assistant component renders, reconcile the earlier prose separator
-  // using that live result. Without this pass, hidden tool rows (often mixed
-  // with hidden Thinking-only assistants) leave their prose separator beside
-  // the next assistant's native leading blank, producing a double gap.
-  reconcilePrecedingActionSeparator(component, width) {
-    let previous = component?.[this.previousContent];
-    let successorTool;
-    let hasVisibleTool = false;
-    while (previous) {
-      if (this.isToolComponent(previous)) {
-        successorTool = previous;
-        if (this.isVisiblyRenderedTool(previous, width)) hasVisibleTool = true;
-        previous = previous[this.previousContent];
-        continue;
-      }
-      if (this.isTransparentComponent(previous)) {
-        previous = previous[this.previousContent];
-        continue;
-      }
-      break;
-    }
-    if (!successorTool || !previous) return;
-    this.applyActionSeparator(previous, hasVisibleTool ? successorTool : undefined);
   }
 
   // Normalize Thinking children inside one assistant component. Dense mode

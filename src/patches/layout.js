@@ -390,7 +390,9 @@ export async function patchHiddenThinkingLayout(
           this,
           (child) => child?.[compactThinkingRawText] !== undefined,
         );
-        transcriptSpacer.reconcilePrecedingActionSeparator(this, width);
+        // Only mutate the component currently being rendered. Rewriting an
+        // earlier prose component here takes effect one frame late because the
+        // transcript renders top-to-bottom, making pi-tui redraw old rows.
         transcriptSpacer.refreshThinking(this, width);
       }
       return baseRender.call(this, width);
