@@ -1,7 +1,7 @@
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import { activityPhaseForTool, activityToolPhaseLabel, groupLabel, groupLabelColor, renderBlockHeading, sanitizeTerminalText, toolCategory, trimBlankLines } from "./format.js";
 
-const MAX_COLLAPSED_ACTIONS = 10;
+const DEFAULT_COLLAPSED_ACTION_LIMIT = "all";
 
 function jsonLines(value) {
   try {
@@ -55,6 +55,11 @@ export class ToolTimeline {
     this.restrictToActiveIds = true;
     this.lastGroup = undefined;
     this.activeEntries = [];
+    this.collapsedActionLimit = DEFAULT_COLLAPSED_ACTION_LIMIT;
+  }
+
+  setCollapsedActionLimit(limit) {
+    this.collapsedActionLimit = limit === "all" ? "all" : Number(limit);
   }
 
   startAgent() {
@@ -319,7 +324,10 @@ export class ToolTimeline {
 
   renderEntry(entry, width) {
     if (!entry.isTracked) return [];
-    const visibleEntries = entry.turnEntries.slice(-MAX_COLLAPSED_ACTIONS);
+    const actionLimit = this.collapsedActionLimit;
+    const visibleEntries = actionLimit === "all"
+      ? entry.turnEntries
+      : entry.turnEntries.slice(-actionLimit);
     const visibleIndex = visibleEntries.indexOf(entry);
     if (visibleIndex === -1 || !entry.detail || !entry.theme) return [];
 
@@ -341,8 +349,8 @@ export class ToolTimeline {
         : states.includes("running") ? "running" : "complete";
       const count = entry.turnEntries.length;
       const countLabel = visibleIndex === 0
-        ? count > MAX_COLLAPSED_ACTIONS
-          ? ` · last ${MAX_COLLAPSED_ACTIONS} of ${count}`
+        ? actionLimit !== "all" && count > actionLimit
+          ? ` · last ${actionLimit} of ${count}`
           : ` · ${count}`
         : "";
       lines.push(renderBlockHeading(entry.theme, {

@@ -82,6 +82,14 @@ test("bare /glance-ui opens the live panel and changes persist", async (t) => {
   // The panel re-reads state, so the row now shows the applied value.
   const rendered = panel.render(80).join("\n");
   assert.match(rendered, /working-detail: auto \[compact\]/);
+  assert.match(rendered, /retained-tools: \[all\] 10 25 50/);
+
+  // Navigate through transcript-spacing to retained-tools and cycle all -> 10.
+  await panel.handleInput("\x1b[B");
+  await panel.handleInput("\x1b[B");
+  await panel.handleInput("\x1b[C");
+  assert.equal(JSON.parse(readFileSync(cfg, "utf8")).retainedToolCalls, 10);
+  assert.match(h.notifications.at(-1).message, /retained-tools: 10/);
 
   // Esc closes.
   await panel.handleInput("\x1b");
