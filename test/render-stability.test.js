@@ -1,6 +1,6 @@
 // Flicker-class regression: the compact render path mutates Spacer children
-// (normalizeRenderedThinkingChildren / reconcilePrecedingActionSeparator /
-// refreshThinking) and re-renders neighbors. If any of that is non-idempotent,
+// (normalizeRenderedThinkingChildren / refreshThinking). If it mutates an
+// already-rendered neighbor or is non-idempotent,
 // a component's height changes between otherwise-identical frames and the
 // transcript reflows ("flicker up top, redrawing spaces"). These tests pin the
 // invariant: with unchanged state, (a) rendering the same frame twice is
@@ -120,6 +120,37 @@ for (const spacing of ["dense", "separated"]) {
         mk("Third thought paragraph that keeps going for a while so it wraps across the width."),
       ]);
       assertFrameStable(children, `consecutive-thinking/${spacing}`);
+    } finally {
+      env.cleanup();
+    }
+  });
+
+  test(`rendering Thinking never mutates preceding prose across hidden tools (${spacing})`, async () => {
+    const env = await setup(spacing);
+    try {
+      const prose = new env.AssistantMessageComponent(
+        { role: "assistant", content: [{ type: "text", text: "Here is the plan and rationale." }], stopReason: "toolUse" },
+        false,
+      );
+      const readDef = env.harness.registeredTools.find((tool) => tool.name === "read") || {};
+      const hiddenTool = new env.ToolExecutionComponent(
+        "read", "tool-hidden", { path: "a.txt" }, {}, readDef, env.harness.ui, env.harness.ctx.cwd,
+      );
+      hiddenTool.markExecutionStarted?.();
+      hiddenTool.setArgsComplete?.();
+      const thinking = new env.AssistantMessageComponent(
+        { role: "assistant", content: [{ type: "thinking", thinking: "Follow-up reasoning after the tool." }], stopReason: "stop" },
+        true, undefined, env.harness.getHiddenThinkingLabel(),
+      );
+      const children = buildTranscript(env, [prose, hiddenTool, thinking]);
+      const precedingChildren = [...prose.contentContainer.children];
+      thinking.render(WIDTH);
+      assert.deepEqual(
+        prose.contentContainer.children,
+        precedingChildren,
+        `hidden-tool-neighbor/${spacing}: later render must not rewrite earlier prose`,
+      );
+      assertFrameStable(children, `hidden-tool-neighbor/${spacing}`);
     } finally {
       env.cleanup();
     }
