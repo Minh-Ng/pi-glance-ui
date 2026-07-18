@@ -118,18 +118,21 @@ test("glance-ui config persists valid settings and tolerates malformed data", ()
       patchesVersion: "0.80.10",
       workingDetailMode: "hidden",
       transcriptSpacing: "dense",
+      retainedToolCalls: 25,
     }, path);
     assert.deepEqual(loadGlanceUiConfig(path), {
       enabled: false,
       patchesVersion: "0.80.10",
       workingDetailMode: "hidden",
       transcriptSpacing: "dense",
+      retainedToolCalls: 25,
     });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), {
       enabled: false,
       patchesVersion: "0.80.10",
       workingDetailMode: "hidden",
       transcriptSpacing: "dense",
+      retainedToolCalls: 25,
     });
 
     writeFileSync(path, "not json");
@@ -140,6 +143,7 @@ test("glance-ui config persists valid settings and tolerates malformed data", ()
       patchesVersion: " ",
       workingDetailMode: "invalid",
       transcriptSpacing: "invalid",
+      retainedToolCalls: 12,
     }));
     assert.deepEqual(loadGlanceUiConfig(path), {});
   } finally {
@@ -147,7 +151,7 @@ test("glance-ui config persists valid settings and tolerates malformed data", ()
   }
 });
 
-test("collapsed tools show the last ten actions and thinking uses a compact label", async (t) => {
+test("collapsed tool retention defaults to all and supports a rolling limit", async (t) => {
   const configDirectory = mkdtempSync(join(tmpdir(), "glance-ui-integration-"));
   const previousConfigPath = process.env.PI_GLANCE_UI_CONFIG;
   process.env.PI_GLANCE_UI_CONFIG = join(configDirectory, "glance-ui.json");
@@ -188,6 +192,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     patchesVersion: "0.80.10",
     workingDetailMode: "auto",
     transcriptSpacing: "separated",
+    retainedToolCalls: "all",
   });
   await harness.registeredCommands.get("glance-ui").handler("settings", harness.ctx);
   assert.deepEqual(harness.notifications.at(-1), {
@@ -197,6 +202,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
       "patches: on for Pi 0.80.10 (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer",
       "working-detail: auto (auto|compact|expanded|hidden) — tools stay expanded while running and for 5s after the completed result renders",
       "transcript-spacing: separated (dense|separated) — every Thinking block has a leading blank",
+      "retained-tools: all (all|10|25|50) — all compact tool rows remain stable; full history stays in Sections",
       "Change: /glance-ui settings <name> <value>",
       "Sections: /sections or Ctrl+Shift+O",
     ].join("\n"),
@@ -356,6 +362,22 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   });
 
   for (const component of components) component.render(200);
+  const retainedAll = plain(components.flatMap((component) => component.render(200)));
+  assert.match(retainedAll, /Interacted · 12/);
+  assert.doesNotMatch(retainedAll, /last 10 of 12/);
+  assert.match(retainedAll, /"action-0"/);
+  assert.match(retainedAll, /"action-11"/);
+  assert.equal(retainedAll.match(/Custom Action/g)?.length, 12);
+
+  await harness.registeredCommands.get("glance-ui").handler("retained-tools 10", harness.ctx);
+  assert.equal(
+    JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")).retainedToolCalls,
+    10,
+  );
+  assert.deepEqual(harness.notifications.at(-1), {
+    message: "Glance UI retained-tools: 10 · rolling last 10 compact rows; full history stays in Sections · saved",
+    level: "info",
+  });
   const collapsed = plain(components.flatMap((component) => component.render(200)));
   assert.match(collapsed, /Interacted · last 10 of 12/);
   assert.doesNotMatch(collapsed, /Recent actions/);
@@ -756,6 +778,11 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
   );
   assert.deepEqual(harness.notifications.at(-1), {
     message: "Usage: /glance-ui settings working-detail auto|compact|expanded|hidden",
+    level: "warning",
+  });
+  await harness.registeredCommands.get("glance-ui").handler("retained-tools 12", harness.ctx);
+  assert.deepEqual(harness.notifications.at(-1), {
+    message: "Usage: /glance-ui settings retained-tools all|10|25|50",
     level: "warning",
   });
   await harness.registeredCommands.get("glance-ui").handler("settings enabled maybe", harness.ctx);
@@ -1528,6 +1555,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     patchesVersion: "0.80.10",
     workingDetailMode: "compact",
     transcriptSpacing: "separated",
+    retainedToolCalls: 10,
   });
 
   const reloadHarness = createExtensionHarness();
@@ -1542,6 +1570,7 @@ test("collapsed tools show the last ten actions and thinking uses a compact labe
     patchesVersion: "0.80.10",
     workingDetailMode: "compact",
     transcriptSpacing: "separated",
+    retainedToolCalls: 10,
   });
   await emitAsync(reloadHarness, "before_agent_start");
 

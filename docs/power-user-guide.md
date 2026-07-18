@@ -75,6 +75,20 @@ A later global toggle clears the relevant local override. Expanded built-in tool
 
 The setting applies live and is persisted. It requires private patches to affect Thinking layout.
 
+## Collapsed tool retention
+
+```text
+/glance-ui settings retained-tools all
+/glance-ui settings retained-tools 10
+/glance-ui settings retained-tools 25
+/glance-ui settings retained-tools 50
+```
+
+- `all` is the default and keeps every compact tool row stable in the transcript.
+- Numeric values show a rolling window of the most recent compact rows. Older rows remain fully recorded and browsable in `/sections`, but leave the collapsed transcript as new tools arrive.
+
+The setting applies live and is persisted. It changes only collapsed transcript rows; expanded detail and `/sections` always retain the complete tool history.
+
 ## Persistent settings
 
 Run `/glance-ui`, `/glance-ui settings`, or `/glance-ui config` to show every setting and its current value.
@@ -86,6 +100,7 @@ Run `/glance-ui`, `/glance-ui settings`, or `/glance-ui config` to show every se
 /glance-ui patches off
 /glance-ui settings working-detail auto
 /glance-ui settings transcript-spacing dense
+/glance-ui settings retained-tools all
 ```
 
 The persisted file uses this shape:
@@ -95,7 +110,8 @@ The persisted file uses this shape:
   "enabled": true,
   "patchesVersion": "0.80.10",
   "workingDetailMode": "auto",
-  "transcriptSpacing": "dense"
+  "transcriptSpacing": "dense",
+  "retainedToolCalls": "all"
 }
 ```
 

@@ -42,6 +42,7 @@ const MINIMUM_PATCH_VERSION = [0, 80, 8];
 const MINIMUM_PATCH_VERSION_TEXT = MINIMUM_PATCH_VERSION.join(".");
 const WORKING_DETAIL_MODES = new Set(["auto", "compact", "expanded", "hidden"]);
 const TRANSCRIPT_SPACING_MODES = new Set(["dense", "separated"]);
+const RETAINED_TOOL_CALL_VALUES = new Set(["all", "10", "25", "50"]);
 
 export function isPatchVersionSupported(version) {
   if (typeof version !== "string") return false;
@@ -137,6 +138,9 @@ export default function glanceUi(pi) {
   let transcriptSpacing = persistedConfig.transcriptSpacing
     ?? sharedRuntime.transcriptSpacing
     ?? "separated";
+  let retainedToolCalls = persistedConfig.retainedToolCalls
+    ?? sharedRuntime.retainedToolCalls
+    ?? "all";
   let lastSectionRecovery;
   // Session replacement loads the next extension generation before Pi replays
   // the selected transcript, then emits session_start afterward. Keep already
@@ -151,6 +155,8 @@ export default function glanceUi(pi) {
   sharedRuntime.patchesActive = inheritedPatchesActive;
   sharedRuntime.workingDetailMode = workingDetailMode;
   sharedRuntime.transcriptSpacing = transcriptSpacing;
+  sharedRuntime.retainedToolCalls = retainedToolCalls;
+  timeline.setCollapsedActionLimit(retainedToolCalls);
   // Wrappers from builds predating explicit consent consult this legacy slot.
   sharedRuntime.enabled = inheritedPatchesActive;
   let layoutPatch;
@@ -180,6 +186,7 @@ export default function glanceUi(pi) {
     ...(patchesVersion ? { patchesVersion } : {}),
     workingDetailMode,
     transcriptSpacing,
+    retainedToolCalls,
   });
   const workingDetailEffects = {
     auto: "tools stay expanded while running and for 5s after the completed result renders",
@@ -191,6 +198,9 @@ export default function glanceUi(pi) {
     dense: "Thinking and action clusters have only outer spacing",
     separated: "every Thinking block has a leading blank",
   };
+  const retainedToolsEffect = () => retainedToolCalls === "all"
+    ? "all compact tool rows remain stable; full history stays in Sections"
+    : `rolling last ${retainedToolCalls} compact rows; full history stays in Sections`;
   const patchStatus = () => patchesVersion === runningPiVersion() && sharedRuntime.patchesActive
     ? `on for Pi ${runningPiVersion()}`
     : patchesVersion && patchesVersion !== runningPiVersion()
@@ -202,6 +212,7 @@ export default function glanceUi(pi) {
     `patches: ${patchStatus()} (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer`,
     `working-detail: ${workingDetailMode} (auto|compact|expanded|hidden) — ${workingDetailEffects[workingDetailMode]}`,
     `transcript-spacing: ${transcriptSpacing} (dense|separated) — ${transcriptSpacingEffects[transcriptSpacing]}`,
+    `retained-tools: ${retainedToolCalls} (all|10|25|50) — ${retainedToolsEffect()}`,
     ...(lastSectionRecovery
       ? [`sections: ${lastSectionRecovery.actionSections} action groups from ${lastSectionRecovery.toolCalls} calls${lastSectionRecovery.error ? ` — ${lastSectionRecovery.error}` : ""}`]
       : []),
@@ -331,6 +342,7 @@ export default function glanceUi(pi) {
       || persistedConfig.patchesVersion !== patchesVersion
       || persistedConfig.workingDetailMode !== workingDetailMode
       || persistedConfig.transcriptSpacing !== transcriptSpacing
+      || persistedConfig.retainedToolCalls !== retainedToolCalls
     ) {
       persistSettings(ctx);
     }
@@ -493,11 +505,24 @@ export default function glanceUi(pi) {
     );
   };
 
+  const applyRetainedTools = async (value, ctx) => {
+    retainedToolCalls = value === "all" ? "all" : Number(value);
+    sharedRuntime.retainedToolCalls = retainedToolCalls;
+    timeline.setCollapsedActionLimit(retainedToolCalls);
+    const saved = persistSettings(ctx);
+    ctx.ui.requestRender?.();
+    ctx.ui.notify(
+      `Glance UI retained-tools: ${retainedToolCalls} · ${retainedToolsEffect()} · ${saved ? "saved" : "session only"}`,
+      saved ? "info" : "warning",
+    );
+  };
+
   const applySettingByKey = (key, value, ctx) => {
     if (key === "enabled") return applyEnabled(value === "on", ctx);
     if (key === "patches") return applyPatches(value === "on", ctx);
     if (key === "working-detail") return applyWorkingDetail(value, ctx);
     if (key === "transcript-spacing") return applyTranscriptSpacing(value, ctx);
+    if (key === "retained-tools") return applyRetainedTools(value, ctx);
     return undefined;
   };
 
@@ -529,6 +554,13 @@ export default function glanceUi(pi) {
       value: transcriptSpacing,
       values: [...TRANSCRIPT_SPACING_MODES],
       effect: transcriptSpacingEffects[transcriptSpacing],
+    },
+    {
+      key: "retained-tools",
+      label: "retained-tools",
+      value: String(retainedToolCalls),
+      values: [...RETAINED_TOOL_CALL_VALUES],
+      effect: retainedToolsEffect(),
     },
   ];
 
@@ -616,6 +648,18 @@ export default function glanceUi(pi) {
           return;
         }
         await applyTranscriptSpacing(value, ctx);
+        return;
+      }
+
+      if (setting === "retained-tools") {
+        if (tokens.length !== 2 || !RETAINED_TOOL_CALL_VALUES.has(value)) {
+          ctx.ui.notify(
+            "Usage: /glance-ui settings retained-tools all|10|25|50",
+            "warning",
+          );
+          return;
+        }
+        await applyRetainedTools(value, ctx);
         return;
       }
 

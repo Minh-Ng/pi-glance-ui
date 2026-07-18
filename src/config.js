@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 
 const WORKING_DETAIL_MODES = new Set(["auto", "compact", "expanded", "hidden"]);
 const TRANSCRIPT_SPACING_MODES = new Set(["dense", "separated"]);
+const RETAINED_TOOL_CALL_VALUES = new Set(["all", 10, 25, 50]);
 
 function glanceUiConfigPath() {
   return process.env.PI_GLANCE_UI_CONFIG || join(homedir(), ".pi", "agent", "glance-ui.json");
@@ -23,6 +24,9 @@ export function loadGlanceUiConfig(path = glanceUiConfigPath()) {
         : {}),
       ...(TRANSCRIPT_SPACING_MODES.has(parsed.transcriptSpacing)
         ? { transcriptSpacing: parsed.transcriptSpacing }
+        : {}),
+      ...(RETAINED_TOOL_CALL_VALUES.has(parsed.retainedToolCalls)
+        ? { retainedToolCalls: parsed.retainedToolCalls }
         : {}),
     };
   } catch {

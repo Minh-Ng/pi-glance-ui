@@ -4,6 +4,11 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+## 0.2.15
+
+- Default collapsed tool retention to `all`, preventing the former rolling `last 10 of N` window from retroactively removing earlier transcript rows as new tools arrive. Configure `retained-tools all|10|25|50`; `/sections` always retains complete history.
+- Keep prose/action spacing stable by suppressing a later component's duplicate leading boundary instead of mutating an earlier component after it already rendered.
+
 ## 0.2.14
 
 - Stop streaming Thinking from flickering: the compact row now anchors to a stable head (fixed max-char prefix) instead of a sliding recent tail, so its content and height stop changing as more tokens arrive.
