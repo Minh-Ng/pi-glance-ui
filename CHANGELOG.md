@@ -4,6 +4,10 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+## 0.2.14
+
+- Stop streaming Thinking from flickering: the compact row now anchors to a stable head (fixed max-char prefix) instead of a sliding recent tail, so its content and height stop changing as more tokens arrive.
+
 ## 0.2.13
 
 - Collapse transcript-level replay spacers immediately when Ctrl+T reveals previously hidden Thinking, preventing double blank rows in dense mode; cross the spacing matrix with shown and hidden Thinking states.

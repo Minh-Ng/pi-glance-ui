@@ -248,8 +248,13 @@ export function formatThinkingText(value, isExpanded) {
 
 export function formatCompactThinkingText(value) {
   const source = String(value ?? "");
+  // Anchor to a stable head, not a sliding tail: while thinking streams, a
+  // tail window (`slice(-N)`) shifts every token, re-wrapping the block and
+  // changing its rendered height on every frame, which flickers. A fixed head
+  // prefix stays byte-identical once the block exceeds the budget, so the
+  // compact row stops changing as more tokens arrive.
   const bounded = source.length > MAX_COMPACT_THINKING_CHARS
-    ? `…${source.slice(-(MAX_COMPACT_THINKING_CHARS - 1))}`
+    ? `${source.slice(0, MAX_COMPACT_THINKING_CHARS - 1)}…`
     : source;
   return formatThinkingText(bounded, false);
 }

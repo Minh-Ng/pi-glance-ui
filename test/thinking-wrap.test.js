@@ -59,13 +59,22 @@ test("width is clamped so tiny widths never throw", () => {
   assert.ok(continuationsAreIndented(wrapThinkingLines(source, 1)));
 });
 
-test("compact streaming thinking formats only a bounded recent tail", () => {
-  const discarded = `discarded-start-marker ${"old reasoning ".repeat(MAX_COMPACT_THINKING_CHARS)}`;
-  const latest = "latest conclusion remains visible";
-  const formatted = formatCompactThinkingText(`${discarded}${latest}`);
+test("compact streaming thinking anchors to a bounded, stable head", () => {
+  const head = `head-start-marker ${"early reasoning ".repeat(MAX_COMPACT_THINKING_CHARS)}`;
+  const later = "later reasoning that arrives after the budget is exceeded";
+  const formatted = formatCompactThinkingText(`${head}${later}`);
 
-  assert.ok(!formatted.includes("discarded-start-marker"));
+  assert.ok(formatted.includes("head-start-marker"));
   assert.ok(formatted.includes("…"));
-  assert.ok(formatted.includes(latest));
-  assert.ok(formatted.length <= MAX_COMPACT_THINKING_CHARS + 20);
+  assert.ok(!formatted.includes(later));
+  assert.ok(formatted.length <= MAX_COMPACT_THINKING_CHARS + 60);
+});
+
+test("compact streaming head stays byte-stable as more tokens arrive (no flicker)", () => {
+  const head = "stable head prose ".repeat(MAX_COMPACT_THINKING_CHARS);
+  const atBudget = formatCompactThinkingText(head);
+  const withMore = formatCompactThinkingText(`${head}${"appended streaming tail ".repeat(50)}`);
+  const withEvenMore = formatCompactThinkingText(`${head}${"appended streaming tail ".repeat(500)}`);
+  assert.equal(withMore, atBudget, "appending tokens must not change the compact head");
+  assert.equal(withEvenMore, atBudget, "further tokens must still not change the compact head");
 });
