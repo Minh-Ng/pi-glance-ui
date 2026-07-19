@@ -322,6 +322,20 @@ export class ToolTimeline {
     entry.theme = theme;
   }
 
+  renderTransientEntry({ category, phase, state, detail, theme }, width) {
+    const lines = [
+      renderBlockHeading(theme, {
+        label: `${activityToolPhaseLabel(phase)} · ${groupLabel(category)}`,
+        labelColor: groupLabelColor(category),
+        state,
+        isExpanded: false,
+      }),
+    ];
+    const detailLines = detail("└");
+    lines.push(...(Array.isArray(detailLines) ? detailLines : [detailLines]));
+    return lines.map((line) => truncateToWidth(line, Math.max(1, width), "…"));
+  }
+
   renderEntry(entry, width) {
     if (!entry.isTracked) return [];
     const actionLimit = this.collapsedActionLimit;
