@@ -76,6 +76,77 @@ async function createRunningBash(
   return component;
 }
 
+test("compact mode stays compact while tool arguments are streaming", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-compact-streaming-"));
+  const previousConfig = process.env.PI_GLANCE_UI_CONFIG;
+  process.env.PI_GLANCE_UI_CONFIG = join(directory, "glance-ui.json");
+  t.after(() => {
+    if (previousConfig === undefined) delete process.env.PI_GLANCE_UI_CONFIG;
+    else process.env.PI_GLANCE_UI_CONFIG = previousConfig;
+    rmSync(directory, { recursive: true, force: true });
+  });
+  writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
+    enabled: true,
+    patchesVersion: "0.80.10",
+    workingDetailMode: "compact",
+  }));
+
+  const target = harness();
+  glanceUi(target.pi);
+  const codingAgentEntry = import.meta.resolve("@earendil-works/pi-coding-agent");
+  const [{ initTheme }, { ToolExecutionComponent }] = await Promise.all([
+    import(new URL("./modes/interactive/theme/theme.js", codingAgentEntry).href),
+    import(new URL("./modes/interactive/components/tool-execution.js", codingAgentEntry).href),
+  ]);
+  initTheme("dark");
+  await emit(target, "session_start");
+  await emit(target, "before_agent_start");
+
+  const args = {
+    path: "src/streaming.js",
+    content: "const streamed = true;\n".repeat(20),
+  };
+  const definition = target.registeredTools.find((tool) => tool.name === "write");
+  const component = new ToolExecutionComponent(
+    "write",
+    "streaming-write",
+    args,
+    {},
+    definition,
+    target.ui,
+    target.ctx.cwd,
+  );
+  component.setExpanded(true);
+
+  for (const repetitions of [1, 10, 20]) {
+    component.updateArgs({
+      ...args,
+      content: "const streamed = true;\n".repeat(repetitions),
+    });
+    const preExecution = plain(component.render(160));
+    assert.match(preExecution, /Implement · Changed/);
+    assert.match(preExecution, /Write src\/streaming\.js/);
+    assert.doesNotMatch(preExecution, /const streamed = true/);
+  }
+
+  await target.commands.get("glance-ui").handler("working-detail hidden", target.ctx);
+  assert.deepEqual(component.render(160), []);
+  await target.commands.get("glance-ui").handler("working-detail compact", target.ctx);
+  assert.doesNotMatch(plain(component.render(160)), /const streamed = true/);
+
+  component.setArgsComplete();
+  await emit(target, "tool_execution_start", {
+    toolCallId: "streaming-write",
+    toolName: "write",
+    args,
+  });
+  component.markExecutionStarted();
+  const active = plain(component.render(160));
+  assert.match(active, /Implement · Changed/);
+  assert.match(active, /Write src\/streaming\.js/);
+  assert.doesNotMatch(active, /const streamed = true/);
+});
+
 test("auto working detail waits five seconds after the completed result render", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-auto-delay-"));
   const previousConfig = process.env.PI_GLANCE_UI_CONFIG;

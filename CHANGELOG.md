@@ -4,6 +4,10 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+## 0.2.16
+
+- Keep `working-detail compact` compact while tool-call arguments are still streaming, before execution begins.
+
 ## 0.2.15
 
 - Default collapsed tool retention to `all`, preventing the former rolling `last 10 of N` window from retroactively removing earlier transcript rows as new tools arrive. Configure `retained-tools all|10|25|50`; `/sections` always retains complete history.

@@ -361,12 +361,46 @@ export async function patchCompactToolSpacing(
       }
 
       const failed = !this.isPartial && Boolean(this.result?.isError);
+      const state = failed ? "failed" : this.isPartial ? "running" : "complete";
       const category = toolCategory(this.toolName, this.args);
+      const phase = activityPhaseForTool(this.toolName, this.args);
       const color = failed
         ? "error"
         : this.isPartial ? "warning" : groupLabelColor(category);
-      const entry = timeline.register(this.toolCallId, category);
-      if (!entry.isTracked) return rememberVisibleRows(this, renderNative(this, width));
+      const elapsed = clock.ended !== undefined
+        ? ` · ${formatDuration(clock.ended - clock.started)}`
+        : "";
+      const label = summarize(this.toolName, this.args || {}, this.cwd);
+      const detail = (connector) => {
+        const status = failed ? theme.fg("error", " · failed") : "";
+        const lines = [
+          `${theme.fg("dim", `  ${connector} `)}${theme.fg(color, toolAction(this.toolName))} ${theme.fg("toolOutput", label)}${status}${theme.fg("dim", elapsed)}`,
+        ];
+        const errorMessage = failed ? getToolErrorMessage(this.result) : "";
+        if (errorMessage) {
+          lines.push(
+            `${theme.fg("dim", "    │ ")}${theme.fg("error", "Error:")} ${theme.fg("text", errorMessage)}`,
+          );
+        }
+        return lines;
+      };
+      const entry = timeline.register(this.toolCallId, category, phase);
+      if (!entry.isTracked) {
+        // Pi creates and renders a partial tool component while the model is
+        // still streaming its arguments, before tool_execution_start can make
+        // the timeline entry active. Keep that frame compact without adopting
+        // its incomplete classification into the persistent timeline.
+        if (compactWorkingTool && this.isPartial) {
+          return rememberVisibleRows(this, timeline.renderTransientEntry({
+            category,
+            phase,
+            state,
+            detail,
+            theme,
+          }, width));
+        }
+        return rememberVisibleRows(this, renderNative(this, width));
+      }
       entry.workingCompact = compactWorkingTool;
       timeline.attachComponent(
         entry,
@@ -374,27 +408,7 @@ export async function patchCompactToolSpacing(
         (isExpanded) => baseSetExpanded.call(this, isExpanded),
         (detailWidth) => renderExpandedDetail(this, detailWidth),
       );
-      const elapsed = clock.ended !== undefined
-        ? ` · ${formatDuration(clock.ended - clock.started)}`
-        : "";
-      const label = summarize(this.toolName, this.args || {}, this.cwd);
-      timeline.update(entry, {
-        state: failed ? "failed" : this.isPartial ? "running" : "complete",
-        theme,
-        detail: (connector) => {
-          const status = failed ? theme.fg("error", " · failed") : "";
-          const lines = [
-            `${theme.fg("dim", `  ${connector} `)}${theme.fg(color, toolAction(this.toolName))} ${theme.fg("toolOutput", label)}${status}${theme.fg("dim", elapsed)}`,
-          ];
-          const errorMessage = failed ? getToolErrorMessage(this.result) : "";
-          if (errorMessage) {
-            lines.push(
-              `${theme.fg("dim", "    │ ")}${theme.fg("error", "Error:")} ${theme.fg("text", errorMessage)}`,
-            );
-          }
-          return lines;
-        },
-      });
+      timeline.update(entry, { state, theme, detail });
       return rememberVisibleRows(this, new RecentToolSummary(timeline, entry).render(width));
     }
 
