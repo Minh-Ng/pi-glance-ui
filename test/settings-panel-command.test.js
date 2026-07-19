@@ -66,8 +66,8 @@ test("bare /glance-ui opens the live panel and changes persist", async (t) => {
   await command("", h.ctx);
 
   const custom = h.getCustom();
-  assert.ok(custom, "bare command must open a custom overlay");
-  assert.equal(custom.options.overlay, true);
+  assert.ok(custom, "bare command must open a custom inline selector");
+  assert.equal(custom.options, undefined, "settings must render inline rather than as an overlay");
   assert.equal(h.notifications.length, notifBefore, "bare command should not emit a text summary");
 
   const panel = custom.component;

@@ -4,6 +4,10 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+## 0.2.17
+
+- Render `/glance-ui` inline like Pi's native `/settings`, framed by full-width top and bottom separators instead of an overlay popup.
+
 ## 0.2.16
 
 - Keep `working-detail compact` compact while tool-call arguments are still streaming, before execution begins.
