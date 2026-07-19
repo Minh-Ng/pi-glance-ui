@@ -8,7 +8,7 @@ function cycle(values, current, direction) {
   return values[next];
 }
 
-// Interactive, live-updating settings overlay for /glance-ui. Rows are read
+// Interactive, live-updating inline settings selector for /glance-ui. Rows are read
 // fresh from getRows() on every render, so values reflect state mutated by
 // onChange without the panel caching anything.
 export class SettingsPanel {
@@ -69,8 +69,11 @@ export class SettingsPanel {
 
   render(width) {
     const rows = this.getRows();
-    const clamp = (line) => truncateToWidth(line, Math.max(1, width), "…");
+    const renderWidth = Math.max(1, width);
+    const clamp = (line) => truncateToWidth(line, renderWidth, "…");
+    const border = this.theme.fg("border", "─".repeat(renderWidth));
     const lines = [
+      border,
       this.theme.fg("accent", this.theme.bold("Glance UI settings")),
       "",
     ];
@@ -92,6 +95,7 @@ export class SettingsPanel {
       this.status.startsWith("Could not") ? "warning" : "dim",
       this.status || "↑↓ select · ←/→ or Enter change · Esc close",
     ));
+    lines.push(border);
     return lines.map(clamp);
   }
 

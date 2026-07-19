@@ -35,9 +35,12 @@ function panel(overrides = {}) {
 
 const plain = (lines) => lines.map(stripVTControlCharacters).join("\n");
 
-test("renders every setting with the current value marked", () => {
+test("renders every setting with native full-width framing", () => {
   const { p } = panel();
-  const out = plain(p.render(80));
+  const rendered = p.render(80).map(stripVTControlCharacters);
+  assert.equal(rendered[0], "─".repeat(80));
+  assert.equal(rendered.at(-1), "─".repeat(80));
+  const out = rendered.join("\n");
   assert.match(out, /Glance UI settings/);
   assert.match(out, /enabled: \[on\] off/);
   assert.match(out, /patches: on \[off\]/);

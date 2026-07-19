@@ -575,15 +575,7 @@ export default function glanceUi(pi) {
       onChange: (key, value) => applySettingByKey(key, value, ctx),
       requestRender: () => tui.requestRender(),
       onClose: () => done(undefined),
-    }), {
-      overlay: true,
-      overlayOptions: {
-        width: "60%",
-        maxHeight: "70%",
-        anchor: "center",
-        margin: 1,
-      },
-    });
+    }));
   };
 
   pi.registerCommand("glance-ui", {
