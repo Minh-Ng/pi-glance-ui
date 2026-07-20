@@ -723,15 +723,21 @@ test("collapsed tool retention defaults to all and supports a rolling limit", as
     details: {},
     isError: false,
   });
-  assert.doesNotMatch(plain(workingExpanded.render(200)), /\$ printf working-expanded/);
+  assert.match(plain(workingExpanded.render(200)), /\$ printf working-expanded/);
   await harness.registeredCommands.get("sections").handler("", harness.ctx);
   const compactWorkingSection = harness.getCustomComponent().sections.find(
     (section) => section.kind === "tools" && !priorWorkingSectionIds.has(section.id),
   );
-  assert.equal(compactWorkingSection.isExpanded(), false);
+  assert.equal(compactWorkingSection.isExpanded(), true);
   compactWorkingSection.toggle();
+  assert.doesNotMatch(plain(workingExpanded.render(200)), /\$ printf working-expanded/);
+  // Pi can reapply an unchanged global baseline after unrelated UI events; a
+  // section-local override must survive until Ctrl+O actually changes state.
+  workingExpanded.setExpanded(true);
+  assert.doesNotMatch(plain(workingExpanded.render(200)), /\$ printf working-expanded/);
+  workingExpanded.setExpanded(false);
+  workingExpanded.setExpanded(true);
   assert.match(plain(workingExpanded.render(200)), /\$ printf working-expanded/);
-  compactWorkingSection.toggle();
   await harness.registeredCommands.get("glance-ui").handler(
     "working-detail hidden",
     harness.ctx,
@@ -1069,11 +1075,21 @@ test("collapsed tool retention defaults to all and supports a rolling limit", as
   assert.doesNotMatch(reCollapsedThinking, /Older thought block/);
   assert.match(reCollapsedThinking, /○ ▸ Thinking: Latest thought block/);
 
-  // Assistant messages participate in Pi's actual global Ctrl+O expansion path.
+  // Thinking and artifacts participate in Pi's actual global Ctrl+O expansion path.
+  const ctrlOArtifact = new CustomMessageComponent({
+    role: "custom",
+    customType: "ctrl-o-artifact",
+    content: "Full artifact detail marker.",
+    display: true,
+  });
+  assert.match(plain(ctrlOArtifact.render(200)), /◆ ▸ Ctrl O Artifact/);
+  assert.doesNotMatch(plain(ctrlOArtifact.render(200)), /Full artifact detail marker/);
   const globalExpansionMode = {
     toolOutputExpanded: false,
     loadedResourcesContainer: { children: [] },
-    chatContainer: { children: [firstCollapsedThinking, latestCollapsedThinking] },
+    chatContainer: {
+      children: [firstCollapsedThinking, latestCollapsedThinking, ctrlOArtifact],
+    },
     ui: { requestRender() {} },
   };
   InteractiveMode.prototype.setToolsExpanded.call(globalExpansionMode, true);
@@ -1082,9 +1098,13 @@ test("collapsed tool retention defaults to all and supports a rolling limit", as
     plain(latestCollapsedThinking.render(200)),
     /Older thought block with complete recorded prose/,
   );
+  assert.match(plain(ctrlOArtifact.render(200)), /◆ ▾ Ctrl O Artifact/);
+  assert.match(plain(ctrlOArtifact.render(200)), /Full artifact detail marker/);
   InteractiveMode.prototype.setToolsExpanded.call(globalExpansionMode, false);
   assert.doesNotMatch(plain(firstCollapsedThinking.render(200)), /First thought block/);
   assert.doesNotMatch(plain(latestCollapsedThinking.render(200)), /Older thought block/);
+  assert.match(plain(ctrlOArtifact.render(200)), /◆ ▸ Ctrl O Artifact/);
+  assert.doesNotMatch(plain(ctrlOArtifact.render(200)), /Full artifact detail marker/);
 
   const assistantErrorComponent = new AssistantMessageComponent({
     role: "assistant",
@@ -1602,13 +1622,14 @@ test("collapsed tool retention defaults to all and supports a rolling limit", as
   );
   reloadedWorking.markExecutionStarted();
   reloadedWorking.setArgsComplete();
+  reloadedWorking.setExpanded(true);
+  assert.doesNotMatch(plain(reloadedWorking.render(200)), /\$ printf reloaded-working/);
   reloadedWorking.updateResult({
     content: [{ type: "text", text: "reloaded-working complete" }],
     details: {},
     isError: false,
   });
-  reloadedWorking.setExpanded(true);
-  assert.doesNotMatch(plain(reloadedWorking.render(200)), /\$ printf reloaded-working/);
+  assert.match(plain(reloadedWorking.render(200)), /\$ printf reloaded-working/);
   await reloadHarness.registeredCommands.get("glance-ui").handler(
     "working-detail auto",
     reloadHarness.ctx,

@@ -4,6 +4,10 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+## 0.2.18
+
+- Let `Ctrl+O` expand completed tools in `working-detail compact`; the mode now forces compact detail only while a tool is still running.
+
 ## 0.2.17
 
 - Render `/glance-ui` inline like Pi's native `/settings`, framed by full-width top and bottom separators instead of an overlay popup.

@@ -345,10 +345,9 @@ export async function patchCompactToolSpacing(
       && Date.now() - fullRenderAt >= AUTO_WORKING_DETAIL_MIN_EXPANDED_MS;
     const autoExpandedPreview = autoDetailManaged
       && (this.isPartial || !this.result || !autoMinimumElapsed);
-    const compactWorkingTool = timelineEntry?.group.expandedOverride !== true
-      && (
-        workingDetailMode === "compact"
-      );
+    const compactWorkingTool = this.isPartial
+      && timelineEntry?.group.expandedOverride !== true
+      && workingDetailMode === "compact";
     if ((!this.expanded && !autoExpandedPreview) || compactWorkingTool) {
       let clock = timing.get(this);
       if (!clock) {
