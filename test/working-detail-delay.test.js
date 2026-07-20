@@ -147,6 +147,184 @@ test("compact mode stays compact while tool arguments are streaming", async (t) 
   assert.doesNotMatch(active, /const streamed = true/);
 });
 
+test("Ctrl+O controls completed tools across every working-detail mode", async (t) => {
+  const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-ctrl-o-matrix-"));
+  const previousConfig = process.env.PI_GLANCE_UI_CONFIG;
+  process.env.PI_GLANCE_UI_CONFIG = join(directory, "glance-ui.json");
+  t.after(() => {
+    if (previousConfig === undefined) delete process.env.PI_GLANCE_UI_CONFIG;
+    else process.env.PI_GLANCE_UI_CONFIG = previousConfig;
+    rmSync(directory, { recursive: true, force: true });
+  });
+  writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
+    enabled: true,
+    patchesVersion: "0.80.10",
+    workingDetailMode: "auto",
+  }));
+
+  const target = harness();
+  glanceUi(target.pi);
+  const codingAgentEntry = import.meta.resolve("@earendil-works/pi-coding-agent");
+  const [{ initTheme }, { ToolExecutionComponent }, { InteractiveMode }] = await Promise.all([
+    import(new URL("./modes/interactive/theme/theme.js", codingAgentEntry).href),
+    import(new URL("./modes/interactive/components/tool-execution.js", codingAgentEntry).href),
+    import(new URL("./modes/interactive/interactive-mode.js", codingAgentEntry).href),
+  ]);
+  initTheme("dark");
+  await emit(target, "session_start");
+
+  const setCtrlO = (component, expanded) => InteractiveMode.prototype.setToolsExpanded.call({
+    toolOutputExpanded: !expanded,
+    loadedResourcesContainer: { children: [] },
+    chatContainer: { children: [component] },
+    ui: { requestRender() {} },
+  }, expanded);
+  const hasNativeDetail = (component, command) =>
+    plain(component.render(160)).includes(`$ ${command}`);
+  const runningExpectation = {
+    auto: true,
+    compact: false,
+    expanded: false,
+    hidden: false,
+  };
+  const expandedRunningExpectation = {
+    auto: true,
+    compact: false,
+    expanded: true,
+    hidden: false,
+  };
+
+  for (const mode of ["auto", "compact", "expanded", "hidden"]) {
+    await target.commands.get("glance-ui").handler(`working-detail ${mode}`, target.ctx);
+    await emit(target, "before_agent_start");
+    const command = `printf ctrl-o-${mode}`;
+    const component = await createRunningBash(
+      target,
+      ToolExecutionComponent,
+      `ctrl-o-${mode}`,
+      command,
+    );
+
+    assert.equal(
+      hasNativeDetail(component, command),
+      runningExpectation[mode],
+      `${mode}: collapsed Ctrl+O baseline while running`,
+    );
+    setCtrlO(component, true);
+    assert.equal(
+      hasNativeDetail(component, command),
+      expandedRunningExpectation[mode],
+      `${mode}: expanded Ctrl+O state while running`,
+    );
+    setCtrlO(component, false);
+    assert.equal(
+      hasNativeDetail(component, command),
+      false,
+      `${mode}: collapsed Ctrl+O state while running`,
+    );
+
+    component.updateResult({
+      content: [{ type: "text", text: `completed ${mode}` }],
+      details: {},
+      isError: false,
+    });
+    assert.equal(
+      hasNativeDetail(component, command),
+      false,
+      `${mode}: collapsed Ctrl+O state after completion`,
+    );
+    setCtrlO(component, true);
+    assert.equal(
+      hasNativeDetail(component, command),
+      true,
+      `${mode}: expanded Ctrl+O state after completion`,
+    );
+    setCtrlO(component, false);
+    assert.equal(
+      hasNativeDetail(component, command),
+      false,
+      `${mode}: second collapsed Ctrl+O state after completion`,
+    );
+  }
+
+  // The other presentation options are independent, but exercise their full
+  // cross-product with every working-detail mode and Pi's generic fallback for
+  // renderer-less custom tools. This guards against settings transitions or a
+  // rolling retention window silently bypassing the global expansion state.
+  for (const mode of ["auto", "compact", "expanded", "hidden"]) {
+    await target.commands.get("glance-ui").handler(`working-detail ${mode}`, target.ctx);
+    for (const spacing of ["dense", "separated"]) {
+      await target.commands.get("glance-ui").handler(
+        `transcript-spacing ${spacing}`,
+        target.ctx,
+      );
+      for (const retained of ["all", "10", "25", "50"]) {
+        await target.commands.get("glance-ui").handler(
+          `retained-tools ${retained}`,
+          target.ctx,
+        );
+        await emit(target, "before_agent_start");
+        const id = `matrix-${mode}-${spacing}-${retained}`;
+        const args = {
+          subject: `Subject ${id}`,
+          description: `Description ${id}`,
+          activeForm: `Active ${id}`,
+        };
+        const resultMarker = `Result ${id}`;
+        const definition = {
+          name: "TaskCreate",
+          label: "TaskCreate",
+          description: "Renderer-less matrix tool",
+          parameters: {},
+        };
+        const component = new ToolExecutionComponent(
+          "TaskCreate",
+          id,
+          args,
+          {},
+          definition,
+          target.ui,
+          target.ctx.cwd,
+        );
+        component.setExpanded(false);
+        component.setArgsComplete();
+        await emit(target, "tool_execution_start", {
+          toolCallId: id,
+          toolName: "TaskCreate",
+          args,
+        });
+        component.markExecutionStarted();
+        component.updateResult({
+          content: [{ type: "text", text: resultMarker }],
+          details: {},
+          isError: false,
+        });
+
+        setCtrlO(component, false);
+        assert.doesNotMatch(
+          plain(component.render(200)),
+          new RegExp(resultMarker),
+          `${mode}/${spacing}/${retained}: renderer-less tool collapsed`,
+        );
+        setCtrlO(component, true);
+        const expanded = plain(component.render(200));
+        for (const marker of [...Object.values(args), resultMarker]) {
+          assert.ok(
+            expanded.includes(marker),
+            `${mode}/${spacing}/${retained}: missing ${marker} from expanded detail`,
+          );
+        }
+        setCtrlO(component, false);
+        assert.doesNotMatch(
+          plain(component.render(200)),
+          new RegExp(resultMarker),
+          `${mode}/${spacing}/${retained}: renderer-less tool re-collapsed`,
+        );
+      }
+    }
+  }
+});
+
 test("auto working detail waits five seconds after the completed result render", async (t) => {
   const directory = mkdtempSync(join(tmpdir(), "pi-glance-ui-auto-delay-"));
   const previousConfig = process.env.PI_GLANCE_UI_CONFIG;

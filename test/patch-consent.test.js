@@ -36,6 +36,7 @@ function createHarness(confirmations) {
     notify(message, level) {
       notifications.push({ message, level });
     },
+    requestRender() {},
     setHiddenThinkingLabel(label) {
       hiddenThinkingLabel = label;
     },
@@ -53,9 +54,9 @@ function createHarness(confirmations) {
   };
 }
 
-async function emit(target, event) {
+async function emit(target, event, payload = {}) {
   for (const handler of target.handlers.get(event) || []) {
-    await handler({}, target.ctx);
+    await handler(payload, target.ctx);
   }
 }
 
@@ -140,8 +141,48 @@ test("private layout patches require explicit version-scoped consent", async (t)
     level: "warning",
   });
 
+  // Ctrl+O still controls completed built-in tools when private patches are
+  // dormant (public compact rendering) and when Glance UI is fully disabled.
+  await emit(target, "before_agent_start");
+  const publicArgs = { command: "printf public-ctrl-o" };
+  await emit(target, "tool_execution_start", {
+    toolCallId: "public-ctrl-o",
+    toolName: "bash",
+    args: publicArgs,
+  });
+  const publicBash = new ToolExecutionComponent(
+    "bash",
+    "public-ctrl-o",
+    publicArgs,
+    {},
+    target.registeredTools.find((tool) => tool.name === "bash"),
+    target.ctx.ui,
+    target.ctx.cwd,
+  );
+  publicBash.markExecutionStarted();
+  publicBash.setArgsComplete();
+  publicBash.updateResult({
+    content: [{ type: "text", text: "public Ctrl+O result marker" }],
+    details: {},
+    isError: false,
+  });
+  const ctrlOMode = {
+    toolOutputExpanded: false,
+    loadedResourcesContainer: { children: [] },
+    chatContainer: { children: [publicBash] },
+    ui: { requestRender() {} },
+  };
+  InteractiveMode.prototype.setToolsExpanded.call(ctrlOMode, false);
+  assert.doesNotMatch(plain(publicBash.render(160)), /\$ printf public-ctrl-o/);
+  InteractiveMode.prototype.setToolsExpanded.call(ctrlOMode, true);
+  assert.match(plain(publicBash.render(160)), /\$ printf public-ctrl-o/);
+
   const command = target.registeredCommands.get("glance-ui").handler;
   await command("off", target.ctx);
+  InteractiveMode.prototype.setToolsExpanded.call(ctrlOMode, false);
+  assert.doesNotMatch(plain(publicBash.render(160)), /\$ printf public-ctrl-o/);
+  InteractiveMode.prototype.setToolsExpanded.call(ctrlOMode, true);
+  assert.match(plain(publicBash.render(160)), /\$ printf public-ctrl-o/);
   await command("on", target.ctx);
   assert.deepEqual(target.notifications.at(-1), {
     message: "Glance UI enabled: on · compact tool rendering active · saved",
