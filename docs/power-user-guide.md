@@ -108,7 +108,7 @@ The persisted file uses this shape:
 ```json
 {
   "enabled": true,
-  "patchesVersion": "0.80.10",
+  "patchesVersion": "0.82.0",
   "workingDetailMode": "auto",
   "transcriptSpacing": "dense",
   "retainedToolCalls": "all"
@@ -136,8 +136,8 @@ After `/glance-ui patches on` is confirmed for the running Pi version, Glance UI
 
 The current release line requires:
 
-- `@earendil-works/pi-coding-agent` 0.80.8 or newer
-- `@earendil-works/pi-tui` 0.80.8 or newer
+- `@earendil-works/pi-coding-agent` 0.82.0 or newer
+- `@earendil-works/pi-tui` 0.82.0 or newer
 
 Glance UI wraps public built-in tool definitions, but some presentation features require private Pi renderer hooks. Private paths can change between Pi releases.
 

@@ -4,6 +4,8 @@ All notable changes to Pi Glance UI will be documented here.
 
 ## Unreleased
 
+- Validate the public tool wrappers and guarded private renderer patches against Pi 0.82.0; require Pi 0.82.0 or newer.
+
 ## 0.2.18
 
 - Let `Ctrl+O` expand completed tools in `working-detail compact`; the mode now forces compact detail only while a tool is still running.

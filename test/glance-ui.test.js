@@ -12,12 +12,12 @@ import glanceUi, {
 } from "../src/index.js";
 
 test("patch compatibility accepts the minimum and later Pi versions", () => {
-  assert.equal(isPatchVersionSupported("0.80.7"), false);
-  assert.equal(isPatchVersionSupported("0.80.8-beta.1"), false);
-  assert.equal(isPatchVersionSupported("0.80.8"), true);
-  assert.equal(isPatchVersionSupported("0.80.8+build.1"), true);
-  assert.equal(isPatchVersionSupported("0.80.9-beta.1"), true);
-  assert.equal(isPatchVersionSupported("0.81.0"), true);
+  assert.equal(isPatchVersionSupported("0.81.9"), false);
+  assert.equal(isPatchVersionSupported("0.82.0-beta.1"), false);
+  assert.equal(isPatchVersionSupported("0.82.0"), true);
+  assert.equal(isPatchVersionSupported("0.82.0+build.1"), true);
+  assert.equal(isPatchVersionSupported("0.82.1-beta.1"), true);
+  assert.equal(isPatchVersionSupported("0.83.0"), true);
   assert.equal(isPatchVersionSupported("1.0.0"), true);
   assert.equal(isPatchVersionSupported("not-a-version"), false);
 });
@@ -115,21 +115,21 @@ test("glance-ui config persists valid settings and tolerates malformed data", ()
   try {
     saveGlanceUiConfig({
       enabled: false,
-      patchesVersion: "0.80.10",
+      patchesVersion: "0.82.0",
       workingDetailMode: "hidden",
       transcriptSpacing: "dense",
       retainedToolCalls: 25,
     }, path);
     assert.deepEqual(loadGlanceUiConfig(path), {
       enabled: false,
-      patchesVersion: "0.80.10",
+      patchesVersion: "0.82.0",
       workingDetailMode: "hidden",
       transcriptSpacing: "dense",
       retainedToolCalls: 25,
     });
     assert.deepEqual(JSON.parse(readFileSync(path, "utf8")), {
       enabled: false,
-      patchesVersion: "0.80.10",
+      patchesVersion: "0.82.0",
       workingDetailMode: "hidden",
       transcriptSpacing: "dense",
       retainedToolCalls: 25,
@@ -161,7 +161,7 @@ test("collapsed tool retention defaults to all and supports a rolling limit", as
     rmSync(configDirectory, { recursive: true, force: true });
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
-    patchesVersion: "0.80.10",
+    patchesVersion: "0.82.0",
   }));
   const harness = createExtensionHarness();
   glanceUi(harness.pi);
@@ -189,7 +189,7 @@ test("collapsed tool retention defaults to all and supports a rolling limit", as
   ]);
   assert.deepEqual(JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")), {
     enabled: true,
-    patchesVersion: "0.80.10",
+    patchesVersion: "0.82.0",
     workingDetailMode: "auto",
     transcriptSpacing: "separated",
     retainedToolCalls: "all",
@@ -199,7 +199,7 @@ test("collapsed tool retention defaults to all and supports a rolling limit", as
     message: [
       "Glance UI settings",
       "enabled: on (on|off) — compact tool rendering is active",
-      "patches: on for Pi 0.80.10 (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer",
+      "patches: on for Pi 0.82.0 (on|off) — required for Thinking, artifacts, errors, custom tools, and the full section viewer",
       "working-detail: auto (auto|compact|expanded|hidden) — tools stay expanded while running and for 5s after the completed result renders",
       "transcript-spacing: separated (dense|separated) — every Thinking block has a leading blank",
       "retained-tools: all (all|10|25|50) — all compact tool rows remain stable; full history stays in Sections",
@@ -1572,7 +1572,7 @@ test("collapsed tool retention defaults to all and supports a rolling limit", as
   });
   assert.deepEqual(JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")), {
     enabled: false,
-    patchesVersion: "0.80.10",
+    patchesVersion: "0.82.0",
     workingDetailMode: "compact",
     transcriptSpacing: "separated",
     retainedToolCalls: 10,
@@ -1587,7 +1587,7 @@ test("collapsed tool retention defaults to all and supports a rolling limit", as
   assert.equal(reloadHarness.getHiddenThinkingLabel(), "Thinking hidden · Ctrl+T to show");
   assert.deepEqual(JSON.parse(readFileSync(process.env.PI_GLANCE_UI_CONFIG, "utf8")), {
     enabled: true,
-    patchesVersion: "0.80.10",
+    patchesVersion: "0.82.0",
     workingDetailMode: "compact",
     transcriptSpacing: "separated",
     retainedToolCalls: 10,
@@ -1696,7 +1696,7 @@ test("startup render benchmark", {
   });
 
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
-    patchesVersion: "0.80.10",
+    patchesVersion: "0.82.0",
   }));
   const harness = createExtensionHarness();
   glanceUi(harness.pi);
