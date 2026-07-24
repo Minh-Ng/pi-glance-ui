@@ -38,7 +38,7 @@ export function rebuildActionSections({ timeline, sectionController, sessionMana
 }
 
 const SHARED_RUNTIME_STATE = Symbol.for("pi-compact-ui.shared-runtime-state");
-const MINIMUM_PATCH_VERSION = [0, 80, 8];
+const MINIMUM_PATCH_VERSION = [0, 82, 0];
 const MINIMUM_PATCH_VERSION_TEXT = MINIMUM_PATCH_VERSION.join(".");
 const WORKING_DETAIL_MODES = new Set(["auto", "compact", "expanded", "hidden"]);
 const TRANSCRIPT_SPACING_MODES = new Set(["dense", "separated"]);

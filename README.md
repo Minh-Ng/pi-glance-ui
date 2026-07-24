@@ -21,8 +21,8 @@ Glance UI changes transcript presentation only. It does not change how tools exe
 ## Requirements
 
 - Node.js 22.19.0 or newer
-- `@earendil-works/pi-coding-agent` 0.80.8 or newer
-- `@earendil-works/pi-tui` 0.80.8 or newer
+- `@earendil-works/pi-coding-agent` 0.82.0 or newer
+- `@earendil-works/pi-tui` 0.82.0 or newer
 
 ## Install
 

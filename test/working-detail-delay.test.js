@@ -87,7 +87,7 @@ test("compact mode stays compact while tool arguments are streaming", async (t) 
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
     enabled: true,
-    patchesVersion: "0.80.10",
+    patchesVersion: "0.82.0",
     workingDetailMode: "compact",
   }));
 
@@ -158,7 +158,7 @@ test("Ctrl+O controls completed tools across every working-detail mode", async (
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
     enabled: true,
-    patchesVersion: "0.80.10",
+    patchesVersion: "0.82.0",
     workingDetailMode: "auto",
   }));
 
@@ -336,7 +336,7 @@ test("auto working detail waits five seconds after the completed result render",
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
     enabled: true,
-    patchesVersion: "0.80.10",
+    patchesVersion: "0.82.0",
     workingDetailMode: "auto",
   }));
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 10_000 });
@@ -419,7 +419,7 @@ test("early completion stays expanded until the deadline and shutdown cancels ti
   });
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
     enabled: true,
-    patchesVersion: "0.80.10",
+    patchesVersion: "0.82.0",
     workingDetailMode: "auto",
   }));
   t.mock.timers.enable({ apis: ["Date", "setTimeout"], now: 20_000 });

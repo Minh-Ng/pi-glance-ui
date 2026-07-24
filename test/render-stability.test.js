@@ -56,7 +56,7 @@ async function setup(spacing) {
   process.env.PI_GLANCE_UI_CONFIG = join(dir, "glance-ui.json");
   writeFileSync(process.env.PI_GLANCE_UI_CONFIG, JSON.stringify({
     enabled: true,
-    patchesVersion: "0.80.10",
+    patchesVersion: "0.82.0",
     workingDetailMode: "hidden",
     transcriptSpacing: spacing,
   }));
